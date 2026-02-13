@@ -99,6 +99,76 @@ ExBlofin.WebSocket.PrivateConnection.subscribe(pid, [
 ])
 ```
 
+## Terminal Tools
+
+Real-time terminal visualizations using WebSocket streams and REST polling. No API credentials required.
+
+### Dashboard (all-in-one)
+
+Launch all visualizations in a single tmux session:
+
+```bash
+./scripts/dashboard.sh BTC-USDT ETH-USDT SOL-USDT
+./scripts/dashboard.sh --scanner --bar 5m
+./scripts/dashboard.sh --kill
+```
+
+Layout:
+
+```
+┌──────────────────┬──────────────────┐
+│ Ticker Dashboard │ Candlestick Chart│
+├──────────────────┤ (first inst)     │
+│ Trade Tape       │                  │
+├──────────────────┼──────────────────┤
+│ Order Book       │ Funding Rate     │
+└──────────────────┴──────────────────┘
+```
+
+Options: `--demo`, `--scanner` (replaces tickers with market scanner), `--bar BAR` (chart timeframe), `--kill`
+
+### Individual Tools
+
+**Order Book** — real-time bid/ask depth (1-4 instruments)
+
+```bash
+mix run scripts/orderbook.exs BTC-USDT
+mix run scripts/orderbook.exs BTC-USDT ETH-USDT SOL-USDT DOGE-USDT
+```
+
+**Trade Tape** — scrolling time & sales
+
+```bash
+mix run scripts/trades.exs BTC-USDT ETH-USDT --max 40
+```
+
+**Ticker Dashboard** — watchlist with 24h stats
+
+```bash
+mix run scripts/tickers.exs BTC-USDT ETH-USDT SOL-USDT
+```
+
+**Funding Rate Monitor** — current/annualized rates + countdown
+
+```bash
+mix run scripts/funding.exs BTC-USDT ETH-USDT SOL-USDT
+```
+
+**Candlestick Chart** — ASCII candles with volume bars
+
+```bash
+mix run scripts/chart.exs BTC-USDT --bar 5m --height 20
+```
+
+**Market Scanner** — all instruments ranked by volume/change
+
+```bash
+mix run scripts/scanner.exs --sort volume --top 20
+mix run scripts/scanner.exs --sort gainers
+```
+
+All tools support `--demo` for the sandbox environment. Press `Ctrl+C` twice to exit.
+
 ## Modules
 
 | Module | Description |
@@ -119,6 +189,13 @@ ExBlofin.WebSocket.PrivateConnection.subscribe(pid, [
 | `ExBlofin.WebSocket.PublicConnection` | Public WS GenServer |
 | `ExBlofin.WebSocket.PrivateConnection` | Private WS GenServer (auth) |
 | `ExBlofin.WebSocket.CopyTradingConnection` | Copy trading WS GenServer (auth) |
+| `ExBlofin.Terminal.OrderBook` | Real-time order book display |
+| `ExBlofin.Terminal.MultiOrderBook` | Multi-instrument order book grid |
+| `ExBlofin.Terminal.TradeTape` | Scrolling trade tape |
+| `ExBlofin.Terminal.TickerDashboard` | Ticker watchlist dashboard |
+| `ExBlofin.Terminal.FundingMonitor` | Funding rate monitor |
+| `ExBlofin.Terminal.CandlestickChart` | ASCII candlestick chart |
+| `ExBlofin.Terminal.MarketScanner` | Market scanner (REST polling) |
 
 ## Configuration
 
