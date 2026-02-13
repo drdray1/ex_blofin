@@ -95,7 +95,7 @@ defmodule ExBlofin do
   defdelegate get_tickers(client, opts \\ []), to: MarketData
 
   @doc "Returns order book data."
-  defdelegate get_books(client, opts \\ []), to: MarketData
+  defdelegate get_books(client, inst_id, opts \\ []), to: MarketData
 
   @doc "Returns recent trades."
   defdelegate get_trades(client, inst_id, opts \\ []), to: MarketData

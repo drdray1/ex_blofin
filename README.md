@@ -35,7 +35,7 @@ client = ExBlofin.new(nil, nil, nil)
 {:ok, instruments} = ExBlofin.get_instruments(client)
 {:ok, tickers} = ExBlofin.get_tickers(client, instId: "BTC-USDT")
 {:ok, candles} = ExBlofin.get_candles(client, "BTC-USDT", bar: "1H")
-{:ok, books} = ExBlofin.get_books(client, instId: "BTC-USDT")
+{:ok, books} = ExBlofin.get_books(client, "BTC-USDT")
 ```
 
 ### Account
