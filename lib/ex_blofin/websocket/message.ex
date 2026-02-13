@@ -460,6 +460,22 @@ defmodule ExBlofin.WebSocket.Message do
     parse_channel_data(channel, inst_id, data, arg)
   end
 
+  # WebSocket book data comes as: {"arg": ..., "action": "snapshot"|"update", "data": {map}}
+  # Wrap the map in a list and inject the top-level "action" into the data map
+  def parse_decoded(%{"arg" => %{"channel" => channel} = arg, "action" => action, "data" => data})
+      when is_map(data) do
+    inst_id = arg["instId"]
+    data_with_action = Map.put(data, "action", action)
+    parse_channel_data(channel, inst_id, [data_with_action], arg)
+  end
+
+  # Fallback for map data without action
+  def parse_decoded(%{"arg" => %{"channel" => channel} = arg, "data" => data})
+      when is_map(data) do
+    inst_id = arg["instId"]
+    parse_channel_data(channel, inst_id, [data], arg)
+  end
+
   def parse_decoded(_), do: {:error, :unknown_message_format}
 
   # ============================================================================
