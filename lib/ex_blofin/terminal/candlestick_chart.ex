@@ -25,16 +25,21 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   alias ExBlofin.WebSocket.PublicConnection
 
   @label_w 12
-  @default_width 60
   @vol_blocks ~w(▁ ▂ ▃ ▄ ▅ ▆ ▇ █)
+  # Keep a generous buffer so the chart can grow when the pane is widened
+  @buffer_size 300
+  # Overhead lines: blank + title + divider + divider + volume + divider + footer + blank
+  @overhead_rows 8
 
   defstruct [
     :conn_pid,
     :inst_id,
     :bar,
     candles: [],
-    chart_height: 20,
-    max_candles: 60,
+    # nil = auto-size from terminal dimensions
+    chart_height: nil,
+    max_candles: nil,
+    last_size: {0, 0},
     dirty: false
   ]
 
@@ -66,8 +71,8 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   @impl GenServer
   def init({inst_id, opts}) do
     bar = Keyword.get(opts, :bar, "1m")
-    height = Keyword.get(opts, :height, 20)
-    width = Keyword.get(opts, :width, @default_width)
+    height = Keyword.get(opts, :height)
+    width = Keyword.get(opts, :width)
     demo = Keyword.get(opts, :demo, false)
 
     state = %__MODULE__{
@@ -79,7 +84,7 @@ defmodule ExBlofin.Terminal.CandlestickChart do
 
     render_waiting(inst_id, bar)
 
-    # Fetch historical candles via REST
+    # Fetch a generous buffer of candles so the chart can fill a wide terminal
     client = ExBlofin.Client.new(nil, nil, nil, demo: demo)
 
     candles =
@@ -87,7 +92,7 @@ defmodule ExBlofin.Terminal.CandlestickChart do
              client,
              inst_id,
              bar: bar,
-             limit: "#{width}"
+             limit: "#{@buffer_size}"
            ) do
         {:ok, data} when is_list(data) ->
           data
@@ -120,14 +125,20 @@ defmodule ExBlofin.Terminal.CandlestickChart do
         upsert_candle(acc, event)
       end)
 
-    candles = Enum.take(candles, -state.max_candles)
+    candles = Enum.take(candles, -@buffer_size)
     {:noreply, %{state | candles: candles, dirty: true}}
   end
 
   @impl GenServer
-  def handle_info(:do_render, %{dirty: true} = state) do
-    if length(state.candles) > 0, do: render(state)
-    {:noreply, %{state | dirty: false}}
+  def handle_info(:do_render, state) do
+    size = get_terminal_size()
+    dirty = state.dirty or size != state.last_size
+
+    if dirty and length(state.candles) > 0 do
+      render(state)
+    end
+
+    {:noreply, %{state | dirty: false, last_size: size}}
   end
 
   @impl GenServer
@@ -204,8 +215,8 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   end
 
   defp render(state) do
-    candles = state.candles
-    height = state.chart_height
+    {height, width} = effective_dims(state)
+    candles = Enum.take(state.candles, -width)
     last = List.last(candles)
     total_w = @label_w + length(candles) + 2
 
@@ -321,6 +332,33 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     lows = Enum.map(candles, & &1.low)
     highs = Enum.map(candles, & &1.high)
     {Enum.min(lows), Enum.max(highs)}
+  end
+
+  # ============================================================================
+  # Terminal Size
+  # ============================================================================
+
+  defp get_terminal_size do
+    cols =
+      case :io.columns() do
+        {:ok, c} -> c
+        _ -> 80
+      end
+
+    rows =
+      case :io.rows() do
+        {:ok, r} -> r
+        _ -> 24
+      end
+
+    {rows, cols}
+  end
+
+  defp effective_dims(state) do
+    {rows, cols} = get_terminal_size()
+    height = state.chart_height || max(rows - @overhead_rows, 5)
+    width = state.max_candles || max(cols - @label_w - 2, 10)
+    {height, width}
   end
 
   # ============================================================================

@@ -28,11 +28,17 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
   @panel_w 3 * @col_w + 4
   @separator " │ "
 
+  # Fixed lines per panel: header + divider + col_header + divider + spread(3) + divider + footer
+  @panel_overhead 9
+  @min_levels 2
+
   defstruct [
     :conn_pid,
+    # nil = auto-size from terminal dimensions
     :levels,
     inst_ids: [],
     books: %{},
+    last_size: {0, 0},
     dirty: false
   ]
 
@@ -61,9 +67,7 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
 
   @impl GenServer
   def init({inst_ids, opts}) do
-    count = length(inst_ids)
-    default_levels = if count <= 2, do: 10, else: 7
-    levels = Keyword.get(opts, :levels, default_levels)
+    levels = Keyword.get(opts, :levels)
     demo = Keyword.get(opts, :demo, false)
 
     {:ok, conn_pid} = PublicConnection.start_link(demo: demo)
@@ -107,9 +111,15 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
   end
 
   @impl GenServer
-  def handle_info(:do_render, %{dirty: true} = state) do
-    render(state)
-    {:noreply, %{state | dirty: false}}
+  def handle_info(:do_render, state) do
+    size = get_terminal_size()
+    dirty = state.dirty or size != state.last_size
+
+    if dirty do
+      render(state)
+    end
+
+    {:noreply, %{state | dirty: false, last_size: size}}
   end
 
   @impl GenServer
@@ -182,10 +192,16 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
   end
 
   defp render(state) do
+    {max_grid_rows, levels} = effective_layout(state)
+
+    # Truncate instruments to what fits in available grid rows
+    max_instruments = max_grid_rows * 2
+    visible_ids = Enum.take(state.inst_ids, max_instruments)
+
     panels =
-      Enum.map(state.inst_ids, fn id ->
+      Enum.map(visible_ids, fn id ->
         book = Map.get(state.books, id)
-        build_panel(id, book, state.levels)
+        build_panel(id, book, levels)
       end)
 
     rows = Enum.chunk_every(panels, 2)
@@ -229,6 +245,59 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
       IO.ANSI.faint() <>
         String.duplicate("━", total_w) <> IO.ANSI.reset()
     ]
+  end
+
+  # ============================================================================
+  # Terminal Size
+  # ============================================================================
+
+  defp get_terminal_size do
+    cols =
+      case :io.columns() do
+        {:ok, c} -> c
+        _ -> 80
+      end
+
+    rows =
+      case :io.rows() do
+        {:ok, r} -> r
+        _ -> 24
+      end
+
+    {rows, cols}
+  end
+
+  defp effective_layout(state) do
+    if state.levels do
+      # Explicit levels — use original grid layout
+      max_grid_rows = ceil(length(state.inst_ids) / 2)
+      {max_grid_rows, state.levels}
+    else
+      {rows, _cols} = get_terminal_size()
+      num_instruments = length(state.inst_ids)
+      max_grid_rows = ceil(num_instruments / 2)
+
+      # Try from max grid rows down to 1, find first that fits
+      find_fitting_layout(rows, max_grid_rows)
+    end
+  end
+
+  defp find_fitting_layout(rows, grid_rows) when grid_rows >= 1 do
+    # overhead = 2 blanks + grid_rows * 9 fixed per panel + (grid_rows-1) * 2 separators
+    overhead = 2 + grid_rows * @panel_overhead + max(grid_rows - 1, 0) * 2
+    available = rows - overhead
+    levels = div(available, grid_rows * 2)
+
+    if levels >= @min_levels do
+      {grid_rows, levels}
+    else
+      find_fitting_layout(rows, grid_rows - 1)
+    end
+  end
+
+  defp find_fitting_layout(_rows, _grid_rows) do
+    # Absolute minimum: 1 grid row, 2 levels
+    {1, @min_levels}
   end
 
   # ============================================================================
