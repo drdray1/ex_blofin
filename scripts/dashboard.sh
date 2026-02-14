@@ -169,9 +169,9 @@ main() {
 
   # Commands for each pane (reduced defaults for dashboard context)
   local tickers_cmd="mix run scripts/tickers.exs ${inst_str} ${demo_flag}"
-  local chart_cmd="mix run scripts/chart.exs ${first} --height 15 --width 40 --bar ${BAR} ${demo_flag}"
+  local chart_cmd="mix run scripts/chart.exs ${first} --bar ${BAR} ${demo_flag}"
   local trades_cmd="mix run scripts/trades.exs ${inst_str} --max 15 ${demo_flag}"
-  local orderbook_cmd="mix run scripts/orderbook.exs ${inst_str} --levels 8 ${demo_flag}"
+  local orderbook_cmd="mix run scripts/orderbook.exs ${inst_str} ${demo_flag}"
   local funding_cmd="mix run scripts/funding.exs ${inst_str} ${demo_flag}"
 
   # Override tickers with scanner if requested

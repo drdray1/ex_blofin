@@ -24,13 +24,19 @@ defmodule ExBlofin.Terminal.OrderBook do
 
   alias ExBlofin.WebSocket.PublicConnection
 
+  # Fixed lines: blank + header + divider + col_header + divider + spread(3) + divider + footer + blank
+  @overhead_rows 11
+  @min_levels 2
+
   defstruct [
     :conn_pid,
     :inst_id,
     :last_update,
     asks: [],
     bids: [],
-    levels: 15,
+    # nil = auto-size from terminal dimensions
+    levels: nil,
+    last_size: {0, 0},
     dirty: false
   ]
 
@@ -59,7 +65,7 @@ defmodule ExBlofin.Terminal.OrderBook do
 
   @impl GenServer
   def init({inst_id, opts}) do
-    levels = Keyword.get(opts, :levels, 15)
+    levels = Keyword.get(opts, :levels)
     demo = Keyword.get(opts, :demo, false)
 
     {:ok, conn_pid} = PublicConnection.start_link(demo: demo)
@@ -85,9 +91,15 @@ defmodule ExBlofin.Terminal.OrderBook do
   end
 
   @impl GenServer
-  def handle_info(:do_render, %{dirty: true} = state) do
-    render(state)
-    {:noreply, %{state | dirty: false}}
+  def handle_info(:do_render, state) do
+    size = get_terminal_size()
+    dirty = state.dirty or size != state.last_size
+
+    if dirty do
+      render(state)
+    end
+
+    {:noreply, %{state | dirty: false, last_size: size}}
   end
 
   @impl GenServer
@@ -166,8 +178,9 @@ defmodule ExBlofin.Terminal.OrderBook do
   end
 
   defp render(state) do
-    top_asks = state.asks |> Enum.take(state.levels) |> Enum.reverse()
-    top_bids = Enum.take(state.bids, state.levels)
+    levels = effective_levels(state)
+    top_asks = state.asks |> Enum.take(levels) |> Enum.reverse()
+    top_bids = Enum.take(state.bids, levels)
 
     best_ask = List.first(state.asks)
     best_bid = List.first(state.bids)
@@ -252,6 +265,35 @@ defmodule ExBlofin.Terminal.OrderBook do
       end)
 
     rows
+  end
+
+  # ============================================================================
+  # Terminal Size
+  # ============================================================================
+
+  defp get_terminal_size do
+    cols =
+      case :io.columns() do
+        {:ok, c} -> c
+        _ -> 80
+      end
+
+    rows =
+      case :io.rows() do
+        {:ok, r} -> r
+        _ -> 24
+      end
+
+    {rows, cols}
+  end
+
+  defp effective_levels(state) do
+    if state.levels do
+      state.levels
+    else
+      {rows, _cols} = get_terminal_size()
+      max(div(rows - @overhead_rows, 2), @min_levels)
+    end
   end
 
   # ============================================================================
