@@ -1,21 +1,21 @@
-defmodule ExBlofin.Terminal.CandlestickChart do
+defmodule ExBlofin.Terminal.MultiCandlestickChart do
   @moduledoc """
-  Real-time ASCII candlestick chart in the terminal.
+  Multi-instrument candlestick chart display in a grid layout.
 
-  Fetches historical candles via REST, then streams live updates
-  via WebSocket. Renders price candles with volume bars.
+  Displays 2-4 candlestick charts in the terminal.
+  Uses a vertical stack for 2 instruments and a 2x2 grid for 3-4.
 
   ## Usage
 
   From the terminal:
 
-      mix run scripts/chart.exs BTC-USDT
-      mix run scripts/chart.exs ETH-USDT --bar 5m --height 20
+      mix run scripts/chart.exs BTC-USDT ETH-USDT
+      mix run scripts/chart.exs BTC-USDT ETH-USDT SOL-USDT DOGE-USDT --bar 5m
 
   From iex:
 
-      {:ok, pid} = ExBlofin.Terminal.CandlestickChart.start("BTC-USDT")
-      ExBlofin.Terminal.CandlestickChart.stop(pid)
+      {:ok, pid} = ExBlofin.Terminal.MultiCandlestickChart.start(["BTC-USDT", "ETH-USDT"])
+      ExBlofin.Terminal.MultiCandlestickChart.stop(pid)
   """
 
   use GenServer
@@ -26,20 +26,25 @@ defmodule ExBlofin.Terminal.CandlestickChart do
 
   @label_w 12
   @vol_blocks ~w(▁ ▂ ▃ ▄ ▅ ▆ ▇ █)
-  # Keep a generous buffer so the chart can grow when the pane is widened
   @buffer_size 300
-  # Overhead lines: blank + title + divider + divider + volume + divider + legend + footer + blank
-  @overhead_rows 9
+  @separator " │ "
+  @separator_visual_len 3
 
   # EMA overlay styling
   @ema_colors {IO.ANSI.yellow(), IO.ANSI.cyan(), IO.ANSI.magenta()}
   @ema_char "*"
 
+  # Per-panel overhead: title + top_divider + bottom_divider + volume + legend + footer = 6
+  # (legend was already counted above)
+  @panel_overhead 7
+  @min_chart_height 5
+
   defstruct [
     :conn_pid,
-    :inst_id,
     :bar,
-    candles: [],
+    inst_ids: [],
+    # Map of inst_id => %{candles: [...]}
+    charts: %{},
     # nil = auto-size from terminal dimensions
     chart_height: nil,
     max_candles: nil,
@@ -53,20 +58,20 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   # ============================================================================
 
   @doc """
-  Starts the candlestick chart.
+  Starts the multi-instrument candlestick chart.
 
   ## Options
 
     - `:bar` - Candle timeframe (default: "1m")
-    - `:height` - Chart height in rows (default: 20)
-    - `:width` - Number of candles to show (default: 60)
+    - `:height` - Chart height per panel in rows (default: auto)
+    - `:width` - Number of candles per panel (default: auto)
     - `:demo` - Use demo environment (default: false)
   """
-  def start(inst_id, opts \\ []) do
-    GenServer.start_link(__MODULE__, {inst_id, opts})
+  def start(inst_ids, opts \\ []) when is_list(inst_ids) do
+    GenServer.start_link(__MODULE__, {inst_ids, opts})
   end
 
-  @doc "Stops the chart."
+  @doc "Stops the multi chart display."
   def stop(pid), do: GenServer.stop(pid, :normal)
 
   # ============================================================================
@@ -74,7 +79,7 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   # ============================================================================
 
   @impl GenServer
-  def init({inst_id, opts}) do
+  def init({inst_ids, opts}) do
     bar = Keyword.get(opts, :bar, "1m")
     height = Keyword.get(opts, :height)
     width = Keyword.get(opts, :width)
@@ -86,45 +91,53 @@ defmodule ExBlofin.Terminal.CandlestickChart do
         _ -> {9, 21, 55}
       end
 
-    state = %__MODULE__{
-      inst_id: inst_id,
-      bar: bar,
-      chart_height: height,
-      max_candles: width,
-      ema_periods: ema_periods
-    }
+    render_waiting(inst_ids, bar)
 
-    render_waiting(inst_id, bar)
-
-    # Fetch a generous buffer of candles so the chart can fill a wide terminal
+    # Fetch historical candles for all instruments in parallel
     client = ExBlofin.Client.new(nil, nil, nil, demo: demo)
 
-    candles =
-      case ExBlofin.MarketData.get_candles(
-             client,
-             inst_id,
-             bar: bar,
-             limit: "#{@buffer_size}"
-           ) do
-        {:ok, data} when is_list(data) ->
-          data
-          |> Enum.map(&parse_candle_data/1)
-          |> Enum.sort_by(& &1.ts)
+    charts =
+      inst_ids
+      |> Enum.map(fn id ->
+        Task.async(fn ->
+          candles =
+            case ExBlofin.MarketData.get_candles(client, id, bar: bar, limit: "#{@buffer_size}") do
+              {:ok, data} when is_list(data) ->
+                data
+                |> Enum.map(&parse_candle_data/1)
+                |> Enum.sort_by(& &1.ts)
 
-        _ ->
-          []
-      end
+              _ ->
+                []
+            end
+
+          {id, %{candles: candles}}
+        end)
+      end)
+      |> Task.await_many(30_000)
+      |> Map.new()
 
     # Connect WebSocket for live updates
     {:ok, conn_pid} = PublicConnection.start_link(demo: demo)
     PublicConnection.add_subscriber(conn_pid, self())
+
     channel = "candle#{bar}"
 
-    PublicConnection.subscribe(conn_pid, [
-      %{"channel" => channel, "instId" => inst_id}
-    ])
+    channels =
+      Enum.map(inst_ids, &%{"channel" => channel, "instId" => &1})
 
-    state = %{state | conn_pid: conn_pid, candles: candles, dirty: true}
+    PublicConnection.subscribe(conn_pid, channels)
+
+    state = %__MODULE__{
+      conn_pid: conn_pid,
+      inst_ids: inst_ids,
+      bar: bar,
+      chart_height: height,
+      max_candles: width,
+      charts: charts,
+      ema_periods: ema_periods,
+      dirty: true
+    }
 
     :timer.send_interval(100, :do_render)
     {:ok, state}
@@ -132,13 +145,25 @@ defmodule ExBlofin.Terminal.CandlestickChart do
 
   @impl GenServer
   def handle_info({:blofin_event, _channel, events}, state) do
-    candles =
-      Enum.reduce(events, state.candles, fn event, acc ->
-        upsert_candle(acc, event)
+    charts =
+      Enum.reduce(events, state.charts, fn event, acc ->
+        inst_id = event.inst_id
+
+        case Map.get(acc, inst_id) do
+          nil ->
+            acc
+
+          chart_state ->
+            candles =
+              chart_state.candles
+              |> upsert_candle(event)
+              |> Enum.take(-@buffer_size)
+
+            Map.put(acc, inst_id, %{chart_state | candles: candles})
+        end
       end)
 
-    candles = Enum.take(candles, -@buffer_size)
-    {:noreply, %{state | candles: candles, dirty: true}}
+    {:noreply, %{state | charts: charts, dirty: true}}
   end
 
   @impl GenServer
@@ -146,7 +171,10 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     size = get_terminal_size()
     dirty = state.dirty or size != state.last_size
 
-    if dirty and length(state.candles) > 0 do
+    has_data =
+      Enum.any?(state.charts, fn {_id, cs} -> length(cs.candles) > 0 end)
+
+    if dirty and has_data do
       render(state)
     end
 
@@ -245,20 +273,152 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     end)
   end
 
+  defp render_ema_cell(ema_row_tuples, col_idx, row) do
+    colors = Tuple.to_list(@ema_colors)
+
+    ema_row_tuples
+    |> Enum.zip(colors)
+    |> Enum.reverse()
+    |> Enum.reduce(nil, fn {ema_tuple, color}, acc ->
+      if tuple_size(ema_tuple) > col_idx and elem(ema_tuple, col_idx) == row do
+        {color, @ema_char}
+      else
+        acc
+      end
+    end)
+  end
+
+  defp merge_cell(candle_cell, nil), do: candle_cell
+  defp merge_cell(" ", {color, char}), do: color <> char <> IO.ANSI.reset()
+  defp merge_cell(candle_cell, _ema), do: candle_cell
+
+  defp ema_legend_line({p1, p2, p3}) do
+    {c1, c2, c3} = @ema_colors
+    reset = IO.ANSI.reset()
+
+    "  " <>
+      c1 <> "#{@ema_char} #{p1}" <> reset <> " " <>
+      c2 <> "#{@ema_char} #{p2}" <> reset <> " " <>
+      c3 <> "#{@ema_char} #{p3}" <> reset
+  end
+
+  # ============================================================================
+  # Layout Calculation
+  # ============================================================================
+
+  defp grid_dims(state) do
+    case length(state.inst_ids) do
+      2 -> {2, 1}
+      3 -> {2, 2}
+      4 -> {2, 2}
+      _ -> {1, 1}
+    end
+  end
+
+  defp effective_layout(state) do
+    {grid_rows, _grid_cols} = grid_dims(state)
+
+    if state.chart_height do
+      {grid_rows, state.chart_height}
+    else
+      {rows, _cols} = get_terminal_size()
+      find_fitting_layout(rows, grid_rows)
+    end
+  end
+
+  defp find_fitting_layout(rows, grid_rows) when grid_rows >= 1 do
+    # overhead: 2 blanks + grid_rows * panel_overhead + (grid_rows - 1) * 1 separators
+    overhead = 2 + grid_rows * @panel_overhead + max(grid_rows - 1, 0)
+    available = rows - overhead
+    chart_height = div(available, grid_rows)
+
+    if chart_height >= @min_chart_height do
+      {grid_rows, chart_height}
+    else
+      find_fitting_layout(rows, grid_rows - 1)
+    end
+  end
+
+  defp find_fitting_layout(_rows, _grid_rows) do
+    {1, @min_chart_height}
+  end
+
+  defp effective_widths(state) do
+    {_grid_rows, grid_cols} = grid_dims(state)
+    {_rows, cols} = get_terminal_size()
+
+    if grid_cols == 1 do
+      max_candles = state.max_candles || max(cols - @label_w - 2, 10)
+      panel_w = @label_w + max_candles
+      {max_candles, panel_w}
+    else
+      # Two columns: (panel_w * 2) + separator
+      panel_w = div(cols - @separator_visual_len, 2)
+      max_candles = state.max_candles || max(panel_w - @label_w - 2, 10)
+      {max_candles, panel_w}
+    end
+  end
+
   # ============================================================================
   # Terminal Rendering
   # ============================================================================
 
-  defp render_waiting(inst_id, bar) do
+  defp render_waiting(inst_ids, bar) do
     IO.write("\e[H\e[2J")
     IO.puts("")
-    IO.puts("  Loading #{inst_id} #{bar} chart...")
+    IO.puts("  Loading #{Enum.join(inst_ids, ", ")} #{bar} charts...")
     IO.puts("  Fetching historical data...")
   end
 
   defp render(state) do
-    {height, width} = effective_dims(state)
-    candles = Enum.take(state.candles, -width)
+    {grid_rows, chart_height} = effective_layout(state)
+    {_grid_rows_d, grid_cols} = grid_dims(state)
+    {max_candles, panel_w} = effective_widths(state)
+
+    # Truncate instruments to what fits
+    max_instruments = grid_rows * grid_cols
+    visible_ids = Enum.take(state.inst_ids, max_instruments)
+
+    panels =
+      Enum.map(visible_ids, fn id ->
+        chart_state = Map.get(state.charts, id)
+        build_panel(id, chart_state, chart_height, max_candles, panel_w, state.bar, state.ema_periods)
+      end)
+
+    output =
+      if grid_cols == 1 do
+        # Vertical stack — just intersperse separators
+        panels
+        |> Enum.intersperse([row_separator(panel_w)])
+        |> List.flatten()
+      else
+        # 2-column grid
+        panels
+        |> Enum.chunk_every(2)
+        |> Enum.map(&merge_horizontal(&1, panel_w))
+        |> Enum.intersperse([row_separator(panel_w * 2 + @separator_visual_len)])
+        |> List.flatten()
+      end
+
+    output =
+      ([""] ++ output ++ [""])
+      |> Enum.map(fn line -> "\e[2K" <> line end)
+
+    IO.write("\e[H" <> Enum.join(output, "\n") <> "\e[J")
+  end
+
+  defp build_panel(inst_id, %{candles: []}, _chart_height, _max_candles, panel_w, _bar, _ema_periods) do
+    [
+      IO.ANSI.bright() <> "  #{inst_id}" <> IO.ANSI.reset(),
+      "",
+      IO.ANSI.faint() <> "  Waiting for data..." <> IO.ANSI.reset(),
+      ""
+    ]
+    |> Enum.map(&vpad(&1, panel_w))
+  end
+
+  defp build_panel(inst_id, chart_state, chart_height, max_candles, panel_w, bar, ema_periods) do
+    candles = Enum.take(chart_state.candles, -max_candles)
     last = List.last(candles)
     total_w = @label_w + length(candles)
 
@@ -267,29 +427,29 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     price_range_val = if price_range_val == 0.0, do: 1.0, else: price_range_val
 
     # Compute EMA overlay rows
-    {p1, p2, p3} = state.ema_periods
-    ema_lists = compute_emas(state.candles, length(candles), [p1, p2, p3])
+    {p1, p2, p3} = ema_periods
+    ema_lists = compute_emas(chart_state.candles, length(candles), [p1, p2, p3])
 
     ema_row_tuples =
       Enum.map(ema_lists, fn ema_values ->
         ema_values
         |> Enum.map(fn
           nil -> nil
-          price -> price_to_row(price, height, min_low, price_range_val)
+          price -> price_to_row(price, chart_height, min_low, price_range_val)
         end)
         |> List.to_tuple()
       end)
 
     chart_rows =
-      for row <- 0..(height - 1) do
-        price = max_high - row / max(height - 1, 1) * price_range_val
+      for row <- 0..(chart_height - 1) do
+        price = max_high - row / max(chart_height - 1, 1) * price_range_val
         label = pad_left(fmt_price(price), @label_w - 2) <> " ┤"
 
         cells =
           candles
           |> Enum.with_index()
           |> Enum.map(fn {c, col_idx} ->
-            candle_cell = render_cell(c, row, height, min_low, price_range_val)
+            candle_cell = render_cell(c, row, chart_height, min_low, price_range_val)
             ema_cell = render_ema_cell(ema_row_tuples, col_idx, row)
             merge_cell(candle_cell, ema_cell)
           end)
@@ -301,29 +461,25 @@ defmodule ExBlofin.Terminal.CandlestickChart do
 
     lines =
       [
-        "",
-        title_line(state),
+        title_line(inst_id, bar, last),
         "  " <> String.duplicate("─", total_w),
         chart_rows,
         "  " <> String.duplicate("─", total_w),
         "  #{String.duplicate(" ", @label_w)}#{vol_row}",
-        "  " <> String.duplicate("─", total_w),
-        ema_legend_line(state.ema_periods),
-        footer_line(last),
-        ""
+        ema_legend_line(ema_periods),
+        footer_line(last)
       ]
       |> List.flatten()
-      |> Enum.map(fn line -> "\e[2K" <> line end)
+      |> Enum.map(&vpad(&1, panel_w))
 
-    IO.write("\e[H" <> Enum.join(lines, "\n") <> "\e[J")
+    lines
   end
 
-  defp title_line(state) do
-    last = List.last(state.candles)
+  defp title_line(inst_id, bar, last) do
     ts = format_timestamp(last.ts)
 
     IO.ANSI.bright() <>
-      "  #{state.inst_id} #{state.bar}" <>
+      "  #{inst_id} #{bar}" <>
       IO.ANSI.reset() <>
       "  " <>
       IO.ANSI.green() <>
@@ -331,6 +487,23 @@ defmodule ExBlofin.Terminal.CandlestickChart do
       IO.ANSI.reset() <>
       " #{ts}"
   end
+
+  defp footer_line(nil), do: ""
+
+  defp footer_line(c) do
+    color = if c.close >= c.open, do: IO.ANSI.green(), else: IO.ANSI.red()
+    reset = IO.ANSI.reset()
+
+    "  #{IO.ANSI.faint()}O:#{reset}#{fmt_price(c.open)}" <>
+      " #{IO.ANSI.faint()}H:#{reset}#{fmt_price(c.high)}" <>
+      " #{IO.ANSI.faint()}L:#{reset}#{fmt_price(c.low)}" <>
+      " #{IO.ANSI.faint()}C:#{reset}#{color}#{fmt_price(c.close)}#{reset}" <>
+      " #{IO.ANSI.faint()}Vol:#{reset}#{fmt_int(c.vol)}"
+  end
+
+  # ============================================================================
+  # Cell Rendering
+  # ============================================================================
 
   defp render_cell(candle, row, height, min_low, range) do
     high_row = price_to_row(candle.high, height, min_low, range)
@@ -356,36 +529,6 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     end
   end
 
-  defp render_ema_cell(ema_row_tuples, col_idx, row) do
-    colors = Tuple.to_list(@ema_colors)
-
-    # Walk slow to fast so the fast EMA (first) wins ties
-    ema_row_tuples
-    |> Enum.zip(colors)
-    |> Enum.reverse()
-    |> Enum.reduce(nil, fn {ema_tuple, color}, acc ->
-      if tuple_size(ema_tuple) > col_idx and elem(ema_tuple, col_idx) == row do
-        {color, @ema_char}
-      else
-        acc
-      end
-    end)
-  end
-
-  defp merge_cell(candle_cell, nil), do: candle_cell
-  defp merge_cell(" ", {color, char}), do: color <> char <> IO.ANSI.reset()
-  defp merge_cell(candle_cell, _ema), do: candle_cell
-
-  defp ema_legend_line({p1, p2, p3}) do
-    {c1, c2, c3} = @ema_colors
-    reset = IO.ANSI.reset()
-
-    "  " <>
-      c1 <> "#{@ema_char} EMA #{p1}" <> reset <> "  " <>
-      c2 <> "#{@ema_char} EMA #{p2}" <> reset <> "  " <>
-      c3 <> "#{@ema_char} EMA #{p3}" <> reset
-  end
-
   defp price_to_row(price, height, min_low, range) do
     row = (height - 1) * (1.0 - (price - min_low) / range)
     round(row) |> max(0) |> min(height - 1)
@@ -406,23 +549,35 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     |> Enum.join()
   end
 
-  defp footer_line(nil), do: ""
-
-  defp footer_line(c) do
-    color = if c.close >= c.open, do: IO.ANSI.green(), else: IO.ANSI.red()
-    reset = IO.ANSI.reset()
-
-    "  #{IO.ANSI.faint()}O:#{reset}#{fmt_price(c.open)}" <>
-      " #{IO.ANSI.faint()}H:#{reset}#{fmt_price(c.high)}" <>
-      " #{IO.ANSI.faint()}L:#{reset}#{fmt_price(c.low)}" <>
-      " #{IO.ANSI.faint()}C:#{reset}#{color}#{fmt_price(c.close)}#{reset}" <>
-      " #{IO.ANSI.faint()}Vol:#{reset}#{fmt_int(c.vol)}"
-  end
-
   defp price_range(candles) do
     lows = Enum.map(candles, & &1.low)
     highs = Enum.map(candles, & &1.high)
     {Enum.min(lows), Enum.max(highs)}
+  end
+
+  # ============================================================================
+  # Grid Merging (from MultiOrderBook pattern)
+  # ============================================================================
+
+  defp merge_horizontal([panel], panel_w) do
+    empty = List.duplicate(vpad("", panel_w), length(panel))
+    merge_horizontal([panel, empty], panel_w)
+  end
+
+  defp merge_horizontal([left, right], panel_w) do
+    max_lines = max(length(left), length(right))
+    empty = vpad("", panel_w)
+    left = left ++ List.duplicate(empty, max_lines - length(left))
+    right = right ++ List.duplicate(empty, max_lines - length(right))
+
+    Enum.zip_with([left, right], fn [l, r] ->
+      l <> @separator <> r
+    end)
+  end
+
+  defp row_separator(total_w) do
+    IO.ANSI.faint() <>
+      String.duplicate("━", total_w) <> IO.ANSI.reset()
   end
 
   # ============================================================================
@@ -443,13 +598,6 @@ defmodule ExBlofin.Terminal.CandlestickChart do
       end
 
     {rows, cols}
-  end
-
-  defp effective_dims(state) do
-    {rows, cols} = get_terminal_size()
-    height = state.chart_height || max(rows - @overhead_rows, 5)
-    width = state.max_candles || max(cols - @label_w - 2, 10)
-    {height, width}
   end
 
   # ============================================================================
@@ -498,6 +646,16 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     if len >= width,
       do: s,
       else: String.duplicate(" ", width - len) <> s
+  end
+
+  defp vpad(s, width) do
+    visual_len =
+      s
+      |> String.replace(~r/\e\[[0-9;]*m/, "")
+      |> String.length()
+
+    pad = width - visual_len
+    if pad > 0, do: s <> String.duplicate(" ", pad), else: s
   end
 
   defp format_timestamp(nil), do: "--:--:--"

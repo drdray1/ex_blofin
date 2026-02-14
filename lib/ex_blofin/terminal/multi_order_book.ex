@@ -24,13 +24,13 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
 
   alias ExBlofin.WebSocket.PublicConnection
 
-  @col_w 12
-  @panel_w 3 * @col_w + 4
   @separator " │ "
+  @separator_visual_len 3
 
   # Fixed lines per panel: header + divider + col_header + divider + spread(3) + divider + footer
   @panel_overhead 9
   @min_levels 2
+  @min_col_w 8
 
   defstruct [
     :conn_pid,
@@ -193,6 +193,7 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
 
   defp render(state) do
     {max_grid_rows, levels} = effective_layout(state)
+    {col_w, panel_w} = effective_widths()
 
     # Truncate instruments to what fits in available grid rows
     max_instruments = max_grid_rows * 2
@@ -201,15 +202,15 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
     panels =
       Enum.map(visible_ids, fn id ->
         book = Map.get(state.books, id)
-        build_panel(id, book, levels)
+        build_panel(id, book, levels, col_w, panel_w)
       end)
 
     rows = Enum.chunk_every(panels, 2)
 
     output =
       rows
-      |> Enum.map(&merge_horizontal/1)
-      |> Enum.intersperse(row_separator())
+      |> Enum.map(&merge_horizontal(&1, panel_w))
+      |> Enum.intersperse(row_separator(panel_w))
       |> List.flatten()
       |> then(fn lines -> ["" | lines] ++ [""] end)
       |> Enum.map(fn line -> "\e[2K" <> line end)
@@ -217,16 +218,16 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
     IO.write("\e[H" <> Enum.join(output, "\n") <> "\e[J")
   end
 
-  defp merge_horizontal([panel]) do
+  defp merge_horizontal([panel], panel_w) do
     empty =
-      List.duplicate(vpad("", @panel_w), length(panel))
+      List.duplicate(vpad("", panel_w), length(panel))
 
-    merge_horizontal([panel, empty])
+    merge_horizontal([panel, empty], panel_w)
   end
 
-  defp merge_horizontal([left, right]) do
+  defp merge_horizontal([left, right], panel_w) do
     max_lines = max(length(left), length(right))
-    empty = vpad("", @panel_w)
+    empty = vpad("", panel_w)
     left = left ++ List.duplicate(empty, max_lines - length(left))
 
     right =
@@ -237,8 +238,8 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
     end)
   end
 
-  defp row_separator do
-    total_w = 2 * @panel_w + String.length(@separator)
+  defp row_separator(panel_w) do
+    total_w = 2 * panel_w + @separator_visual_len
 
     [
       "",
@@ -265,6 +266,14 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
       end
 
     {rows, cols}
+  end
+
+  defp effective_widths do
+    {_rows, cols} = get_terminal_size()
+    # Two panels side by side: 2 * (3 * col_w + 4) + 3 = 6 * col_w + 11
+    col_w = max(div(cols - @separator_visual_len - 8, 6), @min_col_w)
+    panel_w = 3 * col_w + 4
+    {col_w, panel_w}
   end
 
   defp effective_layout(state) do
@@ -304,20 +313,20 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
   # Panel Building
   # ============================================================================
 
-  defp build_panel(inst_id, %{asks: [], bids: []}, _levels) do
+  defp build_panel(inst_id, %{asks: [], bids: []}, _levels, _col_w, panel_w) do
     [
       IO.ANSI.bright() <>
         "  #{inst_id}" <> IO.ANSI.reset(),
-      divider("─"),
+      divider("─", panel_w),
       "",
       IO.ANSI.faint() <>
         "  Waiting for data..." <> IO.ANSI.reset(),
       ""
     ]
-    |> Enum.map(&vpad(&1, @panel_w))
+    |> Enum.map(&vpad(&1, panel_w))
   end
 
-  defp build_panel(inst_id, book_state, levels) do
+  defp build_panel(inst_id, book_state, levels, col_w, panel_w) do
     top_asks =
       book_state.asks |> Enum.take(levels) |> Enum.reverse()
 
@@ -328,24 +337,24 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
     ts = format_timestamp(book_state.last_update)
 
     [
-      header_line(inst_id, ts),
-      divider("─"),
-      column_header(),
-      divider("─"),
-      format_levels(top_asks, :ask),
-      spread_line(spread, spread_pct),
-      format_levels(top_bids, :bid),
-      divider("─"),
+      header_line(inst_id, ts, panel_w),
+      divider("─", panel_w),
+      column_header(col_w),
+      divider("─", panel_w),
+      format_levels(top_asks, :ask, col_w),
+      spread_line(spread, spread_pct, panel_w),
+      format_levels(top_bids, :bid, col_w),
+      divider("─", panel_w),
       footer_line(mid, top_asks, top_bids)
     ]
     |> List.flatten()
-    |> Enum.map(&vpad(&1, @panel_w))
+    |> Enum.map(&vpad(&1, panel_w))
   end
 
-  defp header_line(inst_id, ts) do
+  defp header_line(inst_id, ts, panel_w) do
     left = "  #{inst_id}"
     visual_right = 2 + String.length(ts)
-    pad = max(@panel_w - String.length(left) - visual_right, 1)
+    pad = max(panel_w - String.length(left) - visual_right, 1)
 
     IO.ANSI.bright() <>
       left <>
@@ -356,24 +365,24 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
       IO.ANSI.bright() <> " #{ts}" <> IO.ANSI.reset()
   end
 
-  defp divider(char) do
-    "  " <> String.duplicate(char, @panel_w - 2)
+  defp divider(char, panel_w) do
+    "  " <> String.duplicate(char, panel_w - 2)
   end
 
-  defp column_header do
+  defp column_header(col_w) do
     IO.ANSI.faint() <>
-      "  #{pad_center("Price", @col_w)}│" <>
-      "#{pad_center("Size", @col_w)}│" <>
-      "#{pad_center("Total", @col_w)}" <>
+      "  #{pad_center("Price", col_w)}│" <>
+      "#{pad_center("Size", col_w)}│" <>
+      "#{pad_center("Total", col_w)}" <>
       IO.ANSI.reset()
   end
 
-  defp spread_line(spread, spread_pct) do
+  defp spread_line(spread, spread_pct, panel_w) do
     text =
       "  Spread: $#{format_number(spread)} " <>
         "(#{format_pct(spread_pct)})"
 
-    eq = "  " <> String.duplicate("═", @panel_w - 2)
+    eq = "  " <> String.duplicate("═", panel_w - 2)
 
     [
       IO.ANSI.bright() <> eq <> IO.ANSI.reset(),
@@ -382,7 +391,7 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
     ]
   end
 
-  defp format_levels(levels, side) do
+  defp format_levels(levels, side, col_w) do
     color =
       if side == :ask, do: IO.ANSI.red(), else: IO.ANSI.green()
 
@@ -396,9 +405,9 @@ defmodule ExBlofin.Terminal.MultiOrderBook do
         cum = cum + size
 
         row =
-          "  #{color}#{pad_right(format_price(price), @col_w)}│" <>
-            "#{pad_right(format_int(size), @col_w)}│" <>
-            "#{pad_right(format_int(cum), @col_w)}#{reset}"
+          "  #{color}#{pad_right(format_price(price), col_w)}│" <>
+            "#{pad_right(format_int(size), col_w)}│" <>
+            "#{pad_right(format_int(cum), col_w)}#{reset}"
 
         {cum, rows ++ [row]}
       end)
