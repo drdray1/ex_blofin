@@ -35,14 +35,14 @@ defmodule ExBlofin.WebSocket.PublicConnection do
   alias ExBlofin.WebSocket.Client, as: StreamClient
   alias ExBlofin.WebSocket.Message
 
-  defp ws_config(key, default) do
-    :ex_blofin |> Application.get_env(:websocket, []) |> Keyword.get(key, default)
+  defp ws_config(key) do
+    :ex_blofin |> Application.fetch_env!(:websocket) |> Keyword.fetch!(key)
   end
 
-  defp ping_interval_ms, do: ws_config(:ping_interval_ms, 25_000)
-  defp reconnect_base_delay_ms, do: ws_config(:reconnect_base_delay_ms, 1_000)
-  defp reconnect_max_delay_ms, do: ws_config(:reconnect_max_delay_ms, 30_000)
-  defp max_reconnect_attempts, do: ws_config(:max_reconnect_attempts, 10)
+  defp ping_interval_ms, do: ws_config(:ping_interval_ms)
+  defp reconnect_base_delay_ms, do: ws_config(:reconnect_base_delay_ms)
+  defp reconnect_max_delay_ms, do: ws_config(:reconnect_max_delay_ms)
+  defp max_reconnect_attempts, do: ws_config(:max_reconnect_attempts)
 
   defmodule State do
     @moduledoc false

@@ -49,9 +49,9 @@ defmodule ExBlofin.Client do
     demo = Keyword.get(opts, :demo, false)
     plug = Keyword.get(opts, :plug)
 
-    http_config = Application.get_env(:ex_blofin, :http, [])
-    max_retries = Keyword.get(http_config, :max_retries, 3)
-    retry_base_delay_ms = Keyword.get(http_config, :retry_base_delay_ms, 500)
+    http_config = Application.fetch_env!(:ex_blofin, :http)
+    max_retries = Keyword.fetch!(http_config, :max_retries)
+    retry_base_delay_ms = Keyword.fetch!(http_config, :retry_base_delay_ms)
 
     req_opts =
       [
