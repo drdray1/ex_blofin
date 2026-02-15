@@ -49,13 +49,17 @@ defmodule ExBlofin.Client do
     demo = Keyword.get(opts, :demo, false)
     plug = Keyword.get(opts, :plug)
 
+    http_config = Application.get_env(:ex_blofin, :http, [])
+    max_retries = Keyword.get(http_config, :max_retries, 3)
+    retry_base_delay_ms = Keyword.get(http_config, :retry_base_delay_ms, 500)
+
     req_opts =
       [
         base_url: base_url(demo),
         headers: [{"content-type", "application/json"}],
         retry: :transient,
-        max_retries: 3,
-        retry_delay: fn attempt -> 500 * Integer.pow(2, attempt) end
+        max_retries: max_retries,
+        retry_delay: fn attempt -> retry_base_delay_ms * Integer.pow(2, attempt) end
       ]
       |> maybe_add_plug(plug)
 

@@ -15,6 +15,8 @@ defmodule ExBlofin.MarketData do
 
   alias ExBlofin.Client
 
+  import ExBlofin.Helpers, only: [build_query: 2]
+
   @type client :: Req.Request.t()
   @type response :: {:ok, term()} | {:error, term()}
 
@@ -271,10 +273,4 @@ defmodule ExBlofin.MarketData do
   @spec valid_candle_bars() :: list(String.t())
   def valid_candle_bars, do: @valid_candle_bars
 
-  @spec build_query(keyword(), list(atom())) :: keyword()
-  defp build_query(opts, allowed_keys) do
-    opts
-    |> Keyword.take(allowed_keys)
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-  end
 end

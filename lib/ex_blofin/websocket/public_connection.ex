@@ -35,10 +35,14 @@ defmodule ExBlofin.WebSocket.PublicConnection do
   alias ExBlofin.WebSocket.Client, as: StreamClient
   alias ExBlofin.WebSocket.Message
 
-  @ping_interval_ms 25_000
-  @reconnect_base_delay_ms 1_000
-  @reconnect_max_delay_ms 30_000
-  @max_reconnect_attempts 10
+  defp ws_config(key, default) do
+    :ex_blofin |> Application.get_env(:websocket, []) |> Keyword.get(key, default)
+  end
+
+  defp ping_interval_ms, do: ws_config(:ping_interval_ms, 25_000)
+  defp reconnect_base_delay_ms, do: ws_config(:reconnect_base_delay_ms, 1_000)
+  defp reconnect_max_delay_ms, do: ws_config(:reconnect_max_delay_ms, 30_000)
+  defp max_reconnect_attempts, do: ws_config(:max_reconnect_attempts, 10)
 
   defmodule State do
     @moduledoc false
@@ -305,33 +309,32 @@ defmodule ExBlofin.WebSocket.PublicConnection do
 
   defp schedule_ping(state) do
     state = cancel_timer(state, :ping_timer)
-    timer = Process.send_after(self(), :send_ping, @ping_interval_ms)
+    timer = Process.send_after(self(), :send_ping, ping_interval_ms())
     %{state | ping_timer: timer}
   end
 
-  defp schedule_reconnect(%{reconnect_attempts: attempts} = state)
-       when attempts >= @max_reconnect_attempts do
-    Logger.error("[ExBlofin.WS.Public] Max reconnect attempts reached")
-    %{state | status: :disconnected}
-  end
+  defp schedule_reconnect(%{reconnect_attempts: attempts} = state) do
+    if attempts >= max_reconnect_attempts() do
+      Logger.error("[ExBlofin.WS.Public] Max reconnect attempts reached")
+      %{state | status: :disconnected}
+    else
+      state = cancel_timer(state, :reconnect_timer)
 
-  defp schedule_reconnect(state) do
-    state = cancel_timer(state, :reconnect_timer)
+      delay =
+        min(
+          reconnect_base_delay_ms() * round(:math.pow(2, attempts)),
+          reconnect_max_delay_ms()
+        )
 
-    delay =
-      min(
-        @reconnect_base_delay_ms * round(:math.pow(2, state.reconnect_attempts)),
-        @reconnect_max_delay_ms
-      )
+      timer = Process.send_after(self(), :reconnect, delay)
 
-    timer = Process.send_after(self(), :reconnect, delay)
-
-    %{
-      state
-      | reconnect_timer: timer,
-        reconnect_attempts: state.reconnect_attempts + 1,
-        status: :reconnecting
-    }
+      %{
+        state
+        | reconnect_timer: timer,
+          reconnect_attempts: attempts + 1,
+          status: :reconnecting
+      }
+    end
   end
 
   defp disconnect(state) do

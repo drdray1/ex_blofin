@@ -15,6 +15,8 @@ defmodule ExBlofin.Asset do
 
   alias ExBlofin.Client
 
+  import ExBlofin.Helpers, only: [build_query: 2]
+
   @type client :: Req.Request.t()
   @type response :: {:ok, term()} | {:error, term()}
 
@@ -117,12 +119,5 @@ defmodule ExBlofin.Asset do
     client
     |> Req.post(url: "/api/v1/asset/demo-apply-money", json: %{})
     |> Client.handle_response()
-  end
-
-  @spec build_query(keyword(), list(atom())) :: keyword()
-  defp build_query(opts, allowed_keys) do
-    opts
-    |> Keyword.take(allowed_keys)
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
   end
 end
