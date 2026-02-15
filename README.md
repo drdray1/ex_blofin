@@ -215,13 +215,24 @@ config :ex_blofin,
   ]
 ```
 
+## API Key Setup
+
+1. Go to [BloFin API Management](https://blofin.com/account/api)
+2. Click **+ Create API Key**
+3. Select **Connect to Third-Party Applications** as usage type
+4. Choose **CCXT** as the application (required — other options may not work)
+5. Set a name and passphrase (4-20 chars, letters/numbers/underscores)
+6. Check **Read** and **Trade** permissions
+7. Add your server's public IP to the whitelist
+8. **Copy the API Key, Secret Key, and Passphrase immediately** — the secret is only shown once
+
 ## Authentication
 
 BloFin uses HMAC-SHA256 signatures with 5 headers:
 
 - `ACCESS-KEY` - API key
 - `ACCESS-SIGN` - Base64(Hex(HMAC-SHA256(secret, prehash)))
-- `ACCESS-TIMESTAMP` - ISO 8601 timestamp
+- `ACCESS-TIMESTAMP` - Millisecond epoch timestamp
 - `ACCESS-NONCE` - Random hex string
 - `ACCESS-PASSPHRASE` - API passphrase
 

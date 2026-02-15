@@ -72,12 +72,11 @@ defmodule ExBlofin.Auth do
   end
 
   @doc """
-  Generates a timestamp in ISO 8601 format with milliseconds.
+  Generates a millisecond epoch timestamp as a string.
   """
   @spec generate_timestamp() :: String.t()
   def generate_timestamp do
-    DateTime.utc_now()
-    |> DateTime.to_iso8601(:extended)
+    System.system_time(:millisecond) |> Integer.to_string()
   end
 
   @doc """
@@ -123,6 +122,7 @@ defmodule ExBlofin.Auth do
   defp extract_body(%{body: nil}), do: ""
   defp extract_body(%{body: ""}), do: ""
   defp extract_body(%{body: body}) when is_binary(body), do: body
+  defp extract_body(%{body: body}) when is_list(body), do: IO.iodata_to_binary(body)
 
   defp extract_body(%{body: {:json, data}}) when is_map(data) or is_list(data),
     do: Jason.encode!(data)
