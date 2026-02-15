@@ -50,7 +50,7 @@ defmodule ExBlofin.Terminal.MultiCandlestickChart do
     max_candles: nil,
     last_size: {0, 0},
     dirty: false,
-    ema_periods: {9, 21, 55}
+    ema_periods: nil
   ]
 
   # ============================================================================
@@ -88,7 +88,7 @@ defmodule ExBlofin.Terminal.MultiCandlestickChart do
     ema_periods =
       case Keyword.get(opts, :ema) do
         [a, b, c] when is_integer(a) and is_integer(b) and is_integer(c) -> {a, b, c}
-        _ -> {9, 21, 55}
+        _ -> nil
       end
 
     render_waiting(inst_ids, bar)
@@ -292,13 +292,21 @@ defmodule ExBlofin.Terminal.MultiCandlestickChart do
   defp merge_cell(" ", {color, char}), do: color <> char <> IO.ANSI.reset()
   defp merge_cell(candle_cell, _ema), do: candle_cell
 
+  defp ema_legend_line(nil), do: []
+
   defp ema_legend_line({p1, p2, p3}) do
     {c1, c2, c3} = @ema_colors
     reset = IO.ANSI.reset()
 
     "  " <>
-      c1 <> "#{@ema_char} #{p1}" <> reset <> " " <>
-      c2 <> "#{@ema_char} #{p2}" <> reset <> " " <>
+      c1 <>
+      "#{@ema_char} #{p1}" <>
+      reset <>
+      " " <>
+      c2 <>
+      "#{@ema_char} #{p2}" <>
+      reset <>
+      " " <>
       c3 <> "#{@ema_char} #{p3}" <> reset
   end
 
@@ -382,7 +390,16 @@ defmodule ExBlofin.Terminal.MultiCandlestickChart do
     panels =
       Enum.map(visible_ids, fn id ->
         chart_state = Map.get(state.charts, id)
-        build_panel(id, chart_state, chart_height, max_candles, panel_w, state.bar, state.ema_periods)
+
+        build_panel(
+          id,
+          chart_state,
+          chart_height,
+          max_candles,
+          panel_w,
+          state.bar,
+          state.ema_periods
+        )
       end)
 
     output =
@@ -407,7 +424,15 @@ defmodule ExBlofin.Terminal.MultiCandlestickChart do
     IO.write("\e[H" <> Enum.join(output, "\n") <> "\e[J")
   end
 
-  defp build_panel(inst_id, %{candles: []}, _chart_height, _max_candles, panel_w, _bar, _ema_periods) do
+  defp build_panel(
+         inst_id,
+         %{candles: []},
+         _chart_height,
+         _max_candles,
+         panel_w,
+         _bar,
+         _ema_periods
+       ) do
     [
       IO.ANSI.bright() <> "  #{inst_id}" <> IO.ANSI.reset(),
       "",
@@ -426,19 +451,24 @@ defmodule ExBlofin.Terminal.MultiCandlestickChart do
     price_range_val = max_high - min_low
     price_range_val = if price_range_val == 0.0, do: 1.0, else: price_range_val
 
-    # Compute EMA overlay rows
-    {p1, p2, p3} = ema_periods
-    ema_lists = compute_emas(chart_state.candles, length(candles), [p1, p2, p3])
-
+    # Compute EMA overlay rows (only if EMAs are enabled)
     ema_row_tuples =
-      Enum.map(ema_lists, fn ema_values ->
-        ema_values
-        |> Enum.map(fn
-          nil -> nil
-          price -> price_to_row(price, chart_height, min_low, price_range_val)
-        end)
-        |> List.to_tuple()
-      end)
+      case ema_periods do
+        {p1, p2, p3} ->
+          chart_state.candles
+          |> compute_emas(length(candles), [p1, p2, p3])
+          |> Enum.map(fn ema_values ->
+            ema_values
+            |> Enum.map(fn
+              nil -> nil
+              price -> price_to_row(price, chart_height, min_low, price_range_val)
+            end)
+            |> List.to_tuple()
+          end)
+
+        nil ->
+          []
+      end
 
     chart_rows =
       for row <- 0..(chart_height - 1) do
