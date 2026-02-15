@@ -125,6 +125,8 @@ Layout:
 └──────────────────┴──────────────────┘
 ```
 
+![Dashboard](assets/dashboard.png)
+
 Options: `--demo`, `--scanner` (replaces tickers with market scanner), `--bar BAR` (chart timeframe), `--kill`
 
 ### Individual Tools

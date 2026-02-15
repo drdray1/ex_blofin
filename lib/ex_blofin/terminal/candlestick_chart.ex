@@ -45,7 +45,7 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     max_candles: nil,
     last_size: {0, 0},
     dirty: false,
-    ema_periods: {9, 21, 55}
+    ema_periods: nil
   ]
 
   # ============================================================================
@@ -83,7 +83,7 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     ema_periods =
       case Keyword.get(opts, :ema) do
         [a, b, c] when is_integer(a) and is_integer(b) and is_integer(c) -> {a, b, c}
-        _ -> {9, 21, 55}
+        _ -> nil
       end
 
     state = %__MODULE__{
@@ -266,19 +266,24 @@ defmodule ExBlofin.Terminal.CandlestickChart do
     price_range_val = max_high - min_low
     price_range_val = if price_range_val == 0.0, do: 1.0, else: price_range_val
 
-    # Compute EMA overlay rows
-    {p1, p2, p3} = state.ema_periods
-    ema_lists = compute_emas(state.candles, length(candles), [p1, p2, p3])
-
+    # Compute EMA overlay rows (only if EMAs are enabled)
     ema_row_tuples =
-      Enum.map(ema_lists, fn ema_values ->
-        ema_values
-        |> Enum.map(fn
-          nil -> nil
-          price -> price_to_row(price, height, min_low, price_range_val)
-        end)
-        |> List.to_tuple()
-      end)
+      case state.ema_periods do
+        {p1, p2, p3} ->
+          state.candles
+          |> compute_emas(length(candles), [p1, p2, p3])
+          |> Enum.map(fn ema_values ->
+            ema_values
+            |> Enum.map(fn
+              nil -> nil
+              price -> price_to_row(price, height, min_low, price_range_val)
+            end)
+            |> List.to_tuple()
+          end)
+
+        nil ->
+          []
+      end
 
     chart_rows =
       for row <- 0..(height - 1) do
@@ -376,13 +381,21 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   defp merge_cell(" ", {color, char}), do: color <> char <> IO.ANSI.reset()
   defp merge_cell(candle_cell, _ema), do: candle_cell
 
+  defp ema_legend_line(nil), do: []
+
   defp ema_legend_line({p1, p2, p3}) do
     {c1, c2, c3} = @ema_colors
     reset = IO.ANSI.reset()
 
     "  " <>
-      c1 <> "#{@ema_char} EMA #{p1}" <> reset <> "  " <>
-      c2 <> "#{@ema_char} EMA #{p2}" <> reset <> "  " <>
+      c1 <>
+      "#{@ema_char} EMA #{p1}" <>
+      reset <>
+      "  " <>
+      c2 <>
+      "#{@ema_char} EMA #{p2}" <>
+      reset <>
+      "  " <>
       c3 <> "#{@ema_char} EMA #{p3}" <> reset
   end
 

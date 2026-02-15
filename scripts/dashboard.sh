@@ -11,9 +11,19 @@ set -euo pipefail
 #   ./scripts/dashboard.sh
 #   ./scripts/dashboard.sh BTC-USDT ETH-USDT
 #   ./scripts/dashboard.sh --scanner --bar 5m
+#   ./scripts/dashboard.sh --console
 #   ./scripts/dashboard.sh --kill
 #
-# Layout:
+# Default layout:
+#   ┌──────────────────┬──────────────────┐
+#   │ Ticker Dashboard │ Charts (1-4)     │
+#   ├──────────────────┤                  │
+#   │ Trade Tape       │                  │
+#   ├──────────────────┼──────────────────┤
+#   │ Order Book       │ Funding Rate     │
+#   └──────────────────┴──────────────────┘
+#
+# With --console:
 #   ┌──────────────────┬──────────────────┐
 #   │ Ticker Dashboard │ Charts (1-4)     │
 #   ├──────────────────┤                  │
@@ -38,6 +48,7 @@ BAR="1m"
 DEMO=false
 KILL=false
 USE_SCANNER=false
+USE_CONSOLE=false
 
 # ============================================================================
 # Usage
@@ -50,9 +61,10 @@ BloFin Terminal Dashboard
 Usage: scripts/dashboard.sh [OPTIONS] [INSTRUMENTS...]
 
 Arguments:
-  INSTRUMENTS       Space-separated instrument IDs (default: BTC-USDT ETH-USDT SOL-USDT)
+  INSTRUMENTS       Space-separated instrument IDs (default: SOL-USDT ADA-USDT)
 
 Options:
+  --console         Include control/console pane in the right column
   --demo            Use demo/sandbox environment for all panes
   --kill            Kill existing dashboard session and exit
   --scanner         Replace ticker dashboard with market scanner
@@ -62,6 +74,7 @@ Options:
 Examples:
   ./scripts/dashboard.sh
   ./scripts/dashboard.sh BTC-USDT SOL-USDT DOGE-USDT ADA-USDT
+  ./scripts/dashboard.sh --console
   ./scripts/dashboard.sh --scanner --bar 5m
   ./scripts/dashboard.sh --demo
   ./scripts/dashboard.sh --kill
@@ -91,6 +104,10 @@ parse_args() {
         USE_SCANNER=true
         shift
         ;;
+      --console)
+        USE_CONSOLE=true
+        shift
+        ;;
       --bar)
         BAR="${2:?--bar requires a value (e.g. 1m, 5m, 1H)}"
         shift 2
@@ -109,7 +126,7 @@ parse_args() {
 
   # Apply defaults if no instruments given
   if [[ ${#INSTRUMENTS[@]} -eq 0 ]]; then
-    INSTRUMENTS=("BTC-USDT" "SOL-USDT" "ADA-USDT" "DOGE-USDT")
+    INSTRUMENTS=("SOL-USDT" "ADA-USDT")
   fi
 }
 
@@ -185,16 +202,29 @@ main() {
   fi
 
   echo "Starting dashboard: ${inst_str}"
-  echo "Layout: ${tickers_title} | Charts | Trades | Order Book | Funding | Control"
+  if [[ "$USE_CONSOLE" == true ]]; then
+    echo "Layout: ${tickers_title} | Charts | Trades | Order Book | Funding | Control"
+  else
+    echo "Layout: ${tickers_title} | Charts | Trades | Order Book | Funding"
+  fi
   echo ""
 
   # ── Create tmux session and panes ──────────────────────────────────────────
   #
-  # Layout:
+  # Default layout:
   #   ┌──────────┬──────────┐
   #   │ Tickers  │ Charts   │  <- top row
   #   ├──────────┤          │
   #   │ Trades   │          │  <- chart gets 60% of right column
+  #   ├──────────┼──────────┤
+  #   │ Orderbook│ Funding  │
+  #   └──────────┴──────────┘
+  #
+  # With --console:
+  #   ┌──────────┬──────────┐
+  #   │ Tickers  │ Charts   │
+  #   ├──────────┤          │
+  #   │ Trades   │          │
   #   ├──────────┼──────────┤
   #   │ Orderbook│ Funding  │
   #   │          ├──────────┤
@@ -210,21 +240,23 @@ main() {
   local pane_chart
   pane_chart=$(tmux split-window -h -t "$pane_tickers" -p 50 -c "$PROJECT_DIR" -P -F '#{pane_id}' "$chart_cmd")
 
-  # Split Tickers vertically — bottom 67% for Trades + Orderbook
+  # Split Tickers vertically — bottom 75% for Trades + Orderbook
   local pane_trades
-  pane_trades=$(tmux split-window -v -t "$pane_tickers" -p 67 -c "$PROJECT_DIR" -P -F '#{pane_id}' "$trades_cmd")
+  pane_trades=$(tmux split-window -v -t "$pane_tickers" -p 75 -c "$PROJECT_DIR" -P -F '#{pane_id}' "$trades_cmd")
 
   # Split Trades in half — bottom becomes Orderbook
   local pane_orderbook
   pane_orderbook=$(tmux split-window -v -t "$pane_trades" -p 50 -c "$PROJECT_DIR" -P -F '#{pane_id}' "$orderbook_cmd")
 
-  # Split Chart — bottom 40% becomes Funding + Control
+  # Split Chart — bottom 10% becomes Funding (+ Control if --console)
   local pane_funding
-  pane_funding=$(tmux split-window -v -t "$pane_chart" -p 40 -c "$PROJECT_DIR" -P -F '#{pane_id}' "$funding_cmd")
+  pane_funding=$(tmux split-window -v -t "$pane_chart" -p 10 -c "$PROJECT_DIR" -P -F '#{pane_id}' "$funding_cmd")
 
-  # Split Funding — bottom 40% becomes Control
-  local pane_control
-  pane_control=$(tmux split-window -v -t "$pane_funding" -p 40 -c "$PROJECT_DIR" -P -F '#{pane_id}')
+  # Optionally split Funding — bottom 40% becomes Control
+  local pane_control=""
+  if [[ "$USE_CONSOLE" == true ]]; then
+    pane_control=$(tmux split-window -v -t "$pane_funding" -p 40 -c "$PROJECT_DIR" -P -F '#{pane_id}')
+  fi
 
   # ── Write state file for control pane ────────────────────────────────────
 
@@ -237,7 +269,8 @@ main() {
     json_instruments="${json_instruments}\"${INSTRUMENTS[$i]}\""
   done
 
-  cat > "$STATE_FILE" <<STATEEOF
+  if [[ "$USE_CONSOLE" == true ]]; then
+    cat > "$STATE_FILE" <<STATEEOF
 {
   "project_dir": "$PROJECT_DIR",
   "pane_chart": "$pane_chart",
@@ -252,9 +285,10 @@ main() {
 }
 STATEEOF
 
-  # Start control pane
-  local control_cmd="mix run scripts/control.exs $STATE_FILE"
-  tmux send-keys -t "$pane_control" "$control_cmd" Enter
+    # Start control pane
+    local control_cmd="mix run scripts/control.exs $STATE_FILE"
+    tmux send-keys -t "$pane_control" "$control_cmd" Enter
+  fi
 
   # ── Style the session ─────────────────────────────────────────────────────
 
@@ -284,10 +318,15 @@ STATEEOF
   tmux select-pane -t "$pane_trades"    -T "Trades"
   tmux select-pane -t "$pane_orderbook" -T "Order Book"
   tmux select-pane -t "$pane_funding"   -T "Funding"
-  tmux select-pane -t "$pane_control"   -T "Control"
 
-  # Focus on control pane
-  tmux select-pane -t "$pane_control"
+  if [[ "$USE_CONSOLE" == true ]]; then
+    tmux select-pane -t "$pane_control" -T "Control"
+    # Focus on control pane
+    tmux select-pane -t "$pane_control"
+  else
+    # Focus on funding pane
+    tmux select-pane -t "$pane_funding"
+  fi
 
   # ── Attach ─────────────────────────────────────────────────────────────────
 
