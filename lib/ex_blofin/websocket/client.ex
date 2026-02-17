@@ -123,9 +123,23 @@ defmodule ExBlofin.WebSocket.Client do
   @impl WebSockex
   def handle_disconnect(disconnect_map, state) do
     reason = disconnect_map[:reason] || :unknown
-    Logger.warning("[ExBlofin.WebSocket.Client] Disconnected: #{inspect(reason)}")
-    send(state.parent_pid, {:stream_disconnected, self(), reason})
-    {:ok, %{state | connected: false}}
+    attempt = disconnect_map[:attempt_number] || 1
+
+    case reason do
+      :normal ->
+        Logger.info("[ExBlofin.WebSocket.Client] Closed normally")
+        send(state.parent_pid, {:stream_disconnected, self(), :normal})
+        {:ok, %{state | connected: false}}
+
+      _ ->
+        Logger.warning(
+          "[ExBlofin.WebSocket.Client] Disconnected: #{inspect(reason)}, " <>
+            "reconnecting (attempt #{attempt})"
+        )
+
+        send(state.parent_pid, {:stream_disconnected, self(), reason})
+        {:reconnect, %{state | connected: false}}
+    end
   end
 
   @impl WebSockex
