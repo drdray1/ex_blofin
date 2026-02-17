@@ -255,10 +255,13 @@ defmodule ExBlofin.WebSocket.PrivateConnection do
 
   @impl GenServer
   def handle_info({:stream_disconnected, ws_pid, reason}, %{websocket_pid: ws_pid} = state) do
-    Logger.warning("[ExBlofin.WS.Private] Disconnected: #{inspect(reason)}")
-    state = %{state | websocket_pid: nil, status: :disconnected}
+    Logger.warning(
+      "[ExBlofin.WS.Private] Disconnected: #{inspect(reason)}, WebSocket client will reconnect"
+    )
+
+    state = %{state | status: :reconnecting}
     state = cancel_timer(state, :ping_timer)
-    {:noreply, schedule_reconnect(state)}
+    {:noreply, state}
   end
 
   @impl GenServer
