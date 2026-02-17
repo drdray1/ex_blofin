@@ -45,7 +45,7 @@ defmodule ExBlofin.WebSocket.PrivateConnection do
   @ping_interval_ms 25_000
   @reconnect_base_delay_ms 1_000
   @reconnect_max_delay_ms 30_000
-  @max_reconnect_attempts 10
+  # Reconnect indefinitely — cap exponent at 10 so delay stays at @reconnect_max_delay_ms
 
   defmodule State do
     @moduledoc false
@@ -345,18 +345,12 @@ defmodule ExBlofin.WebSocket.PrivateConnection do
     %{state | ping_timer: timer}
   end
 
-  defp schedule_reconnect(%{reconnect_attempts: attempts} = state)
-       when attempts >= @max_reconnect_attempts do
-    Logger.error("[ExBlofin.WS.Private] Max reconnect attempts reached")
-    %{state | status: :disconnected}
-  end
-
   defp schedule_reconnect(state) do
     state = cancel_timer(state, :reconnect_timer)
 
     delay =
       min(
-        @reconnect_base_delay_ms * round(:math.pow(2, state.reconnect_attempts)),
+        @reconnect_base_delay_ms * round(:math.pow(2, min(state.reconnect_attempts, 10))),
         @reconnect_max_delay_ms
       )
 
