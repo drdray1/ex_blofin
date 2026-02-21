@@ -141,6 +141,21 @@ defmodule ExBlofin.TradingTest do
       assert {:ok, _} =
                Trading.cancel_tpsl_order(client, %{"instId" => "BTC-USDT", "tpslId" => "tpsl-123"})
     end
+
+    test "sends params wrapped in an array" do
+      Req.Test.expect(@stub, fn conn ->
+        {:ok, body, _conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        assert is_list(decoded)
+        assert [%{"instId" => "BTC-USDT", "tpslId" => "tpsl-123"}] = decoded
+        Req.Test.json(conn, Fixtures.sample_tpsl_order_response())
+      end)
+
+      client = Fixtures.test_client(@stub)
+
+      assert {:ok, _} =
+               Trading.cancel_tpsl_order(client, %{"instId" => "BTC-USDT", "tpslId" => "tpsl-123"})
+    end
   end
 
   describe "get_tpsl_orders/2" do

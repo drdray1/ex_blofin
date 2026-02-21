@@ -189,6 +189,9 @@ defmodule ExBlofin.Trading do
   @doc """
   Cancels a TP/SL order.
 
+  The BloFin cancel-tpsl endpoint expects an array body, so the params
+  map is automatically wrapped in a list before sending.
+
   ## Parameters
 
     - `"instId"` - Instrument ID (required)
@@ -197,7 +200,7 @@ defmodule ExBlofin.Trading do
   @spec cancel_tpsl_order(client(), map()) :: response()
   def cancel_tpsl_order(client, params) do
     client
-    |> Req.post(url: "/api/v1/trade/cancel-tpsl", json: params)
+    |> Req.post(url: "/api/v1/trade/cancel-tpsl", json: [params])
     |> Client.handle_response()
   end
 
