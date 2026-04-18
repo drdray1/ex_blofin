@@ -64,6 +64,8 @@ defmodule ExBlofin.Client do
       |> maybe_add_plug(plug)
 
     Req.new(req_opts)
+    |> Req.Request.prepend_request_steps(telemetry_start: &telemetry_start/1)
+    |> Req.Request.append_response_steps(telemetry_stop: &telemetry_stop/1)
     |> ExBlofin.Auth.attach(api_key, secret_key, passphrase)
   end
 
@@ -223,6 +225,27 @@ defmodule ExBlofin.Client do
   defp extract_error_message(%{"message" => message}) when is_binary(message), do: message
   defp extract_error_message(%{"error" => error}) when is_binary(error), do: error
   defp extract_error_message(_), do: "Unknown error"
+
+  defp telemetry_start(request) do
+    %{request | private: Map.put(request.private, :telemetry_start, System.monotonic_time())}
+  end
+
+  defp telemetry_stop({request, response}) do
+    stop = System.monotonic_time()
+    start = Map.get(request.private, :telemetry_start, stop)
+
+    :telemetry.execute(
+      [:ex_blofin, :request, :stop],
+      %{duration: stop - start},
+      %{
+        method: request.method,
+        path: request.url.path,
+        status: response.status
+      }
+    )
+
+    {request, response}
+  end
 
   defp maybe_add_plug(opts, nil), do: opts
   defp maybe_add_plug(opts, plug), do: Keyword.put(opts, :plug, plug)

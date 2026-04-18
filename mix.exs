@@ -39,6 +39,7 @@ defmodule ExBlofin.MixProject do
       {:req, "~> 0.5"},
       {:jason, "~> 1.4"},
       {:decimal, "~> 2.0"},
+      {:telemetry, "~> 1.0"},
       {:websockex, "~> 0.4"},
       {:plug, "~> 1.14"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},

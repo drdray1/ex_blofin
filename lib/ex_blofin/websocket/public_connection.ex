@@ -187,6 +187,7 @@ defmodule ExBlofin.WebSocket.PublicConnection do
   @impl GenServer
   def handle_info({:stream_connected, ws_pid}, %{websocket_pid: ws_pid} = state) do
     Logger.info("[ExBlofin.WS.Public] Connected")
+    :telemetry.execute([:ex_blofin, :ws, :connected], %{}, %{connection: :public})
 
     state = %{state | status: :connected, reconnect_attempts: 0}
     state = schedule_ping(state)
@@ -214,6 +215,7 @@ defmodule ExBlofin.WebSocket.PublicConnection do
         Logger.error("[ExBlofin.WS.Public] Error: #{code} - #{msg}")
 
       {:ok, channel, events} ->
+        :telemetry.execute([:ex_blofin, :ws, :event], %{count: length(events)}, %{connection: :public, channel: channel})
         broadcast(state.subscribers, channel, events)
 
       {:error, reason} ->
@@ -226,6 +228,7 @@ defmodule ExBlofin.WebSocket.PublicConnection do
   @impl GenServer
   def handle_info({:stream_disconnected, ws_pid, reason}, %{websocket_pid: ws_pid} = state) do
     Logger.warning("[ExBlofin.WS.Public] Disconnected: #{inspect(reason)}")
+    :telemetry.execute([:ex_blofin, :ws, :disconnected], %{}, %{connection: :public, reason: reason})
     state = %{state | websocket_pid: nil, status: :disconnected}
     state = cancel_timer(state, :ping_timer)
     {:noreply, schedule_reconnect(state)}
