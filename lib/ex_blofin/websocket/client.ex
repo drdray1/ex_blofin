@@ -132,15 +132,39 @@ defmodule ExBlofin.WebSocket.Client do
         {:ok, %{state | connected: false}}
 
       _ ->
+        delay = reconnect_delay(reason, attempt)
+
         Logger.warning(
           "[ExBlofin.WebSocket.Client] Disconnected: #{inspect(reason)}, " <>
-            "reconnecting (attempt #{attempt})"
+            "reconnecting in #{delay}ms (attempt #{attempt})"
         )
 
         send(state.parent_pid, {:stream_disconnected, self(), reason})
+        # WebSockex has no native backoff: sleeping here before returning
+        # :reconnect is the supported way to pace retries. Without it a
+        # rate-limited endpoint (HTTP 429) gets hammered many times per
+        # second, which keeps the rate limit tripped indefinitely.
+        Process.sleep(delay)
         {:reconnect, %{state | connected: false}}
     end
   end
+
+  @base_reconnect_delay_ms 1_000
+  @max_reconnect_delay_ms 30_000
+  @rate_limited_floor_ms 10_000
+
+  @doc false
+  def reconnect_delay(reason, attempt) do
+    exponential = @base_reconnect_delay_ms * Integer.pow(2, min(attempt - 1, 5))
+
+    reason
+    |> rate_limited?()
+    |> if(do: max(exponential, @rate_limited_floor_ms), else: exponential)
+    |> min(@max_reconnect_delay_ms)
+  end
+
+  defp rate_limited?(%WebSockex.RequestError{code: 429}), do: true
+  defp rate_limited?(_reason), do: false
 
   @impl WebSockex
   def handle_cast(:close, state) do
