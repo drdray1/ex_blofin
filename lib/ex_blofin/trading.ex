@@ -156,7 +156,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :orderType, :state, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/order-history", params: params)
+    |> Client.get("/api/v1/trade/orders-history", params: params)
     |> Client.handle_response()
   end
 
@@ -220,7 +220,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :tpslId, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/orders-tpsl", params: params)
+    |> Client.get("/api/v1/trade/orders-tpsl-pending", params: params)
     |> Client.handle_response()
   end
 
@@ -256,7 +256,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/order-tpsl-history", params: params)
+    |> Client.get("/api/v1/trade/orders-tpsl-history", params: params)
     |> Client.handle_response()
   end
 
@@ -317,7 +317,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :algoId, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/orders-algo", params: params)
+    |> Client.get("/api/v1/trade/orders-algo-pending", params: params)
     |> Client.handle_response()
   end
 
@@ -336,7 +336,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/order-algo-history", params: params)
+    |> Client.get("/api/v1/trade/orders-algo-history", params: params)
     |> Client.handle_response()
   end
 
@@ -360,7 +360,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :orderId, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/trade-history", params: params)
+    |> Client.get("/api/v1/trade/fills-history", params: params)
     |> Client.handle_response()
   end
 
@@ -374,7 +374,7 @@ defmodule ExBlofin.Trading do
   @spec get_order_price_range(client(), String.t()) :: response()
   def get_order_price_range(client, inst_id) do
     client
-    |> Req.get(url: "/api/v1/trade/order-price-range", params: [instId: inst_id])
+    |> Client.get("/api/v1/trade/order/price-range", params: [instId: inst_id])
     |> Client.handle_response()
   end
 

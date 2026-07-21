@@ -69,6 +69,30 @@ defmodule ExBlofin.AssetTest do
     end
   end
 
+  describe "get_currencies/2" do
+    test "returns currency info" do
+      Req.Test.expect(@stub, fn conn ->
+        assert conn.request_path == "/api/v1/asset/currencies"
+        Req.Test.json(conn, Fixtures.sample_currencies_response())
+      end)
+
+      client = Fixtures.test_client(@stub)
+      assert {:ok, currencies} = Asset.get_currencies(client)
+      assert [%{"currency" => "USDT", "chain" => "TRC20"} | _] = currencies
+    end
+
+    test "filters by currency" do
+      Req.Test.expect(@stub, fn conn ->
+        query = URI.decode_query(conn.query_string)
+        assert query["currency"] == "USDT"
+        Req.Test.json(conn, Fixtures.sample_currencies_response())
+      end)
+
+      client = Fixtures.test_client(@stub)
+      assert {:ok, _} = Asset.get_currencies(client, currency: "USDT")
+    end
+  end
+
   describe "apply_demo_money/1" do
     test "requests demo funds" do
       Req.Test.expect(@stub, fn conn ->

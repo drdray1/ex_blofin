@@ -146,6 +146,29 @@ defmodule ExBlofin.Fixtures do
     ])
   end
 
+  # Shape verified against the live endpoint: note `symbol` rather than `instId`,
+  # and no tier index or instType field.
+  def sample_position_tiers_response do
+    success_response([
+      %{
+        "symbol" => "BTC-USDT",
+        "marginMode" => "cross",
+        "minSize" => "0",
+        "maxSize" => "50000",
+        "maxLeverage" => "125",
+        "maintenanceMarginRate" => "0.004"
+      },
+      %{
+        "symbol" => "BTC-USDT",
+        "marginMode" => "cross",
+        "minSize" => "50000",
+        "maxSize" => "250000",
+        "maxLeverage" => "100",
+        "maintenanceMarginRate" => "0.005"
+      }
+    ])
+  end
+
   def sample_funding_rate_response do
     success_response([
       %{
@@ -232,6 +255,29 @@ defmodule ExBlofin.Fixtures do
     ])
   end
 
+  def sample_positions_history_response do
+    success_response([
+      %{
+        "positionId" => "54321",
+        "instId" => "BTC-USDT",
+        "instType" => "SWAP",
+        "marginMode" => "cross",
+        "positionSide" => "long",
+        "leverage" => "10",
+        "openAveragePrice" => "50000.0",
+        "closeAveragePrice" => "51000.0",
+        "positions" => "100",
+        "closedPositions" => "100",
+        "realizedPnl" => "100.0",
+        "fee" => "-1.5",
+        "fundingFee" => "-0.2",
+        "liquidationPrice" => "45000.0",
+        "createTime" => "1697021343571",
+        "updateTime" => "1697031343571"
+      }
+    ])
+  end
+
   def sample_account_config_response do
     success_response([
       %{
@@ -279,6 +325,31 @@ defmodule ExBlofin.Fixtures do
         "balance" => "1.5",
         "available" => "1.5",
         "frozen" => "0"
+      }
+    ])
+  end
+
+  def sample_currencies_response do
+    success_response([
+      %{
+        "currency" => "USDT",
+        "chain" => "TRC20",
+        "minDeposit" => "1",
+        "minWithdrawal" => "10",
+        "minWithdrawalFee" => "1",
+        "canDeposit" => true,
+        "canWithdraw" => true,
+        "canInternalTransfer" => true
+      },
+      %{
+        "currency" => "USDT",
+        "chain" => "ERC20",
+        "minDeposit" => "1",
+        "minWithdrawal" => "20",
+        "minWithdrawalFee" => "8",
+        "canDeposit" => true,
+        "canWithdraw" => true,
+        "canInternalTransfer" => true
       }
     ])
   end

@@ -91,7 +91,7 @@ defmodule ExBlofin.TradingTest do
   describe "get_order_history/2" do
     test "returns order history" do
       Req.Test.expect(@stub, fn conn ->
-        assert conn.request_path == "/api/v1/trade/order-history"
+        assert conn.request_path == "/api/v1/trade/orders-history"
         Req.Test.json(conn, Fixtures.sample_order_history_response())
       end)
 
@@ -161,7 +161,7 @@ defmodule ExBlofin.TradingTest do
   describe "get_tpsl_orders/2" do
     test "returns TP/SL orders" do
       Req.Test.expect(@stub, fn conn ->
-        assert conn.request_path == "/api/v1/trade/orders-tpsl"
+        assert conn.request_path == "/api/v1/trade/orders-tpsl-pending"
         Req.Test.json(conn, Fixtures.sample_tpsl_order_response())
       end)
 
@@ -219,7 +219,7 @@ defmodule ExBlofin.TradingTest do
   describe "get_trade_history/2" do
     test "returns trade history" do
       Req.Test.expect(@stub, fn conn ->
-        assert conn.request_path == "/api/v1/trade/trade-history"
+        assert conn.request_path == "/api/v1/trade/fills-history"
         Req.Test.json(conn, Fixtures.sample_trade_history_response())
       end)
 
@@ -231,7 +231,7 @@ defmodule ExBlofin.TradingTest do
   describe "get_order_price_range/2" do
     test "returns price range" do
       Req.Test.expect(@stub, fn conn ->
-        assert conn.request_path == "/api/v1/trade/order-price-range"
+        assert conn.request_path == "/api/v1/trade/order/price-range"
         query = URI.decode_query(conn.query_string)
         assert query["instId"] == "BTC-USDT"
         Req.Test.json(conn, Fixtures.sample_order_price_range_response())

@@ -60,6 +60,30 @@ defmodule ExBlofin.Account do
   end
 
   @doc """
+  Retrieves historical (closed) positions.
+
+  ## Options
+
+    - `:instId` - Specific instrument ID
+    - `:before` - Pagination cursor: records newer than this position ID
+    - `:after` - Pagination cursor: records older than this position ID
+    - `:limit` - Number of results (default 20, max 100)
+
+  ## Examples
+
+      {:ok, positions} = Account.get_positions_history(client)
+      {:ok, positions} = Account.get_positions_history(client, instId: "BTC-USDT", limit: "50")
+  """
+  @spec get_positions_history(client(), keyword()) :: response()
+  def get_positions_history(client, opts \\ []) do
+    params = build_query(opts, [:instId, :before, :after, :limit])
+
+    client
+    |> Req.get(url: "/api/v1/account/positions-history", params: params)
+    |> Client.handle_response()
+  end
+
+  @doc """
   Retrieves current margin mode for an instrument.
 
   ## Options

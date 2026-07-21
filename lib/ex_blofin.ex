@@ -21,8 +21,12 @@ defmodule ExBlofin do
       {:ok, positions} = ExBlofin.get_positions(client)
 
       # Trading
-      {:ok, result} = ExBlofin.market_order(client, "BTC-USDT", "buy", "net", "10")
-      {:ok, result} = ExBlofin.limit_order(client, "BTC-USDT", "buy", "net", "10", "50000.0")
+      {:ok, result} = ExBlofin.market_order(client, "BTC-USDT", "buy", "10")
+      {:ok, result} = ExBlofin.limit_order(client, "BTC-USDT", "buy", "10", "50000.0")
+
+      # Overriding the "cross"/"net" defaults
+      {:ok, result} = ExBlofin.market_order(client, "BTC-USDT", "buy", "10",
+        marginMode: "isolated", positionSide: "long")
 
   ## Demo Trading
 
@@ -103,6 +107,9 @@ defmodule ExBlofin do
   @doc "Returns mark price."
   defdelegate get_mark_price(client, opts \\ []), to: MarketData
 
+  @doc "Returns position tier data (max leverage per position size)."
+  defdelegate get_position_tiers(client, opts \\ []), to: MarketData
+
   @doc "Returns current funding rate."
   defdelegate get_funding_rate(client, opts \\ []), to: MarketData
 
@@ -127,6 +134,9 @@ defmodule ExBlofin do
 
   @doc "Returns current positions."
   defdelegate get_positions(client, opts \\ []), to: Account
+
+  @doc "Returns historical (closed) positions."
+  defdelegate get_positions_history(client, opts \\ []), to: Account
 
   @doc "Returns margin mode."
   defdelegate get_margin_mode(client, opts \\ []), to: Account
@@ -155,6 +165,9 @@ defmodule ExBlofin do
 
   @doc "Returns asset balances."
   defdelegate get_balances(client, opts \\ []), to: Asset
+
+  @doc "Returns currency info (chains, withdrawal fees, availability)."
+  defdelegate get_currencies(client, opts \\ []), to: Asset
 
   @doc "Transfers between accounts."
   defdelegate transfer(client, params), to: Asset
@@ -227,16 +240,16 @@ defmodule ExBlofin do
   defdelegate get_trade_history(client, opts \\ []), to: Trading
 
   @doc "Returns order price range."
-  defdelegate get_order_price_range(client, opts \\ []), to: Trading
+  defdelegate get_order_price_range(client, inst_id), to: Trading
 
   @doc "Closes a position."
   defdelegate close_position(client, params), to: Trading
 
   @doc "Convenience: places a market order."
-  defdelegate market_order(client, inst_id, side, position_side, size), to: Trading
+  defdelegate market_order(client, inst_id, side, size, opts \\ []), to: Trading
 
   @doc "Convenience: places a limit order."
-  defdelegate limit_order(client, inst_id, side, position_side, size, price), to: Trading
+  defdelegate limit_order(client, inst_id, side, size, price, opts \\ []), to: Trading
 
   @doc "Validates order parameters."
   defdelegate validate_order_params(params), to: Trading
@@ -260,10 +273,50 @@ defmodule ExBlofin do
     to: CopyTrading,
     as: :get_balance
 
+  @doc "Returns copy trading positions in \"by order\" mode."
+  defdelegate get_copy_trading_positions_by_order(client, opts \\ []),
+    to: CopyTrading,
+    as: :get_positions_by_order
+
+  @doc "Returns copy trading positions in \"by contract\" mode."
+  defdelegate get_copy_trading_positions_by_contract(client, opts \\ []),
+    to: CopyTrading,
+    as: :get_positions_by_contract
+
+  @doc "Returns copy trading position mode."
+  defdelegate get_copy_trading_position_mode(client),
+    to: CopyTrading,
+    as: :get_position_mode
+
+  @doc "Sets copy trading position mode."
+  defdelegate set_copy_trading_position_mode(client, params),
+    to: CopyTrading,
+    as: :set_position_mode
+
+  @doc "Returns copy trading leverage."
+  defdelegate get_copy_trading_leverage(client, opts \\ []),
+    to: CopyTrading,
+    as: :get_leverage
+
+  @doc "Sets copy trading leverage."
+  defdelegate set_copy_trading_leverage(client, params),
+    to: CopyTrading,
+    as: :set_leverage
+
   @doc "Places a copy trading order."
   defdelegate place_copy_trading_order(client, params),
     to: CopyTrading,
     as: :place_order
+
+  @doc "Cancels a copy trading order."
+  defdelegate cancel_copy_trading_order(client, params),
+    to: CopyTrading,
+    as: :cancel_order
+
+  @doc "Places a copy trading TP/SL order by contract."
+  defdelegate place_copy_trading_tpsl_by_contract(client, params),
+    to: CopyTrading,
+    as: :place_tpsl_by_contract
 
   @doc "Closes a copy trading position."
   defdelegate close_copy_trading_position(client, params),
@@ -286,6 +339,18 @@ defmodule ExBlofin do
 
   @doc "Returns referral code."
   defdelegate get_referral_code(client), to: Affiliate
+
+  @doc "Returns direct invitees."
+  defdelegate get_invitees(client, opts \\ []), to: Affiliate
+
+  @doc "Returns invitees of sub-affiliates."
+  defdelegate get_sub_invitees(client, opts \\ []), to: Affiliate
+
+  @doc "Returns sub-affiliate info."
+  defdelegate get_sub_affiliates(client, opts \\ []), to: Affiliate
+
+  @doc "Returns affiliate commission records."
+  defdelegate get_commission(client, opts \\ []), to: Affiliate
 
   # ============================================================================
   # Tax
@@ -310,4 +375,9 @@ defmodule ExBlofin do
   defdelegate get_tax_spot_trade_history(client, opts \\ []),
     to: Tax,
     as: :get_spot_trade_history
+
+  @doc "Returns tax funds transfer history."
+  defdelegate get_tax_funds_transfer_history(client, opts \\ []),
+    to: Tax,
+    as: :get_funds_transfer_history
 end

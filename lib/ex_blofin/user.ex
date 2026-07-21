@@ -12,7 +12,7 @@ defmodule ExBlofin.User do
   @spec get_api_key_info(client()) :: response()
   def get_api_key_info(client) do
     client
-    |> Req.get(url: "/api/v1/user/api-key-info")
+    |> Client.get("/api/v1/user/query-apikey")
     |> Client.handle_response()
   end
 end

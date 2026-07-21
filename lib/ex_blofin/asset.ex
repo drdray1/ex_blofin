@@ -35,6 +35,28 @@ defmodule ExBlofin.Asset do
   end
 
   @doc """
+  Retrieves currency information: supported chains, withdrawal fees and
+  minimums, and deposit/withdrawal availability.
+
+  ## Options
+
+    - `:currency` - Filter by specific currency
+
+  ## Examples
+
+      {:ok, currencies} = Asset.get_currencies(client)
+      {:ok, currencies} = Asset.get_currencies(client, currency: "USDT")
+  """
+  @spec get_currencies(client(), keyword()) :: response()
+  def get_currencies(client, opts \\ []) do
+    params = build_query(opts, [:currency])
+
+    client
+    |> Req.get(url: "/api/v1/asset/currencies", params: params)
+    |> Client.handle_response()
+  end
+
+  @doc """
   Transfers funds between accounts.
 
   ## Parameters

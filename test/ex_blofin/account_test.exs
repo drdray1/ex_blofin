@@ -109,6 +109,31 @@ defmodule ExBlofin.AccountTest do
     end
   end
 
+  describe "get_positions_history/2" do
+    test "returns closed positions" do
+      Req.Test.expect(@stub, fn conn ->
+        assert conn.request_path == "/api/v1/account/positions-history"
+        Req.Test.json(conn, Fixtures.sample_positions_history_response())
+      end)
+
+      client = Fixtures.test_client(@stub)
+      assert {:ok, [position]} = Account.get_positions_history(client)
+      assert position["realizedPnl"] == "100.0"
+    end
+
+    test "passes pagination options" do
+      Req.Test.expect(@stub, fn conn ->
+        query = URI.decode_query(conn.query_string)
+        assert query["instId"] == "BTC-USDT"
+        assert query["limit"] == "50"
+        Req.Test.json(conn, Fixtures.sample_positions_history_response())
+      end)
+
+      client = Fixtures.test_client(@stub)
+      assert {:ok, _} = Account.get_positions_history(client, instId: "BTC-USDT", limit: "50")
+    end
+  end
+
   describe "get_config/1" do
     test "returns account config" do
       Req.Test.expect(@stub, fn conn ->

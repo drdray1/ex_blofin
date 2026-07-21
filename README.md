@@ -49,11 +49,15 @@ client = ExBlofin.new(nil, nil, nil)
 ### Trading
 
 ```elixir
-# Market order
-{:ok, result} = ExBlofin.market_order(client, "BTC-USDT", "buy", "net", "10")
+# Market order (defaults to marginMode "cross", positionSide "net")
+{:ok, result} = ExBlofin.market_order(client, "BTC-USDT", "buy", "10")
 
 # Limit order
-{:ok, result} = ExBlofin.limit_order(client, "BTC-USDT", "buy", "net", "10", "50000.0")
+{:ok, result} = ExBlofin.limit_order(client, "BTC-USDT", "buy", "10", "50000.0")
+
+# Overriding the defaults
+{:ok, result} = ExBlofin.market_order(client, "BTC-USDT", "buy", "10",
+  marginMode: "isolated", positionSide: "long")
 
 # Full order params
 {:ok, result} = ExBlofin.place_order(client, %{
@@ -178,6 +182,7 @@ All tools support `--demo` for the sandbox environment. Press `Ctrl+C` twice to 
 | `ExBlofin` | Top-level facade with delegates |
 | `ExBlofin.Client` | HTTP client (Req) with auth and response handling |
 | `ExBlofin.Auth` | HMAC-SHA256 Req plugin |
+| `ExBlofin.Paths` | Documented/legacy endpoint path aliases |
 | `ExBlofin.MarketData` | Public market data (instruments, tickers, books, candles) |
 | `ExBlofin.Account` | Account balance, positions, margin, leverage |
 | `ExBlofin.Trading` | Order management, TPSL, algo orders |
@@ -213,6 +218,28 @@ config :ex_blofin,
     ws_private_url: "wss://openapi.blofin.com/ws/private",
     ws_copy_trading_url: "wss://openapi.blofin.com/ws/copytrading/private"
   ]
+```
+
+### Endpoint path resolution
+
+Several endpoint paths in the current BloFin docs disagree with the paths this
+library historically used, and BloFin answers HTTP 401 for *every* unrouted
+path — so the live spelling can't be determined from the outside. By default the
+client tries the documented path, falls back to the legacy one if the documented
+path looks unrouted, and caches the winner. Nothing that worked before breaks.
+
+A successful fallback logs a warning naming both paths. Once you know which
+spelling your account is served, pin it to skip the extra request:
+
+```elixir
+config :ex_blofin, api_path_mode: :documented  # or :legacy, default :auto
+```
+
+Inspect what has been resolved so far with `ExBlofin.Client.resolved_paths/0`,
+or disable the behaviour per client:
+
+```elixir
+client = ExBlofin.new(key, secret, pass, path_fallback: false)
 ```
 
 ## API Key Setup

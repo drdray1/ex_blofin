@@ -1,7 +1,7 @@
 defmodule ExBlofin.MixProject do
   use Mix.Project
 
-  @version "0.1.6"
+  @version "0.2.0"
   @source_url "https://github.com/drdray1/ex_blofin"
 
   def project do
@@ -11,6 +11,7 @@ defmodule ExBlofin.MixProject do
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      test_coverage: test_coverage(),
       elixirc_paths: elixirc_paths(Mix.env()),
 
       # Hex
@@ -34,6 +35,21 @@ defmodule ExBlofin.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
+  # `mix test --cover` fails below the threshold.
+  #
+  # ExBlofin.Terminal.* is excluded: it is the interactive TUI behind the demo
+  # scripts (~3,350 lines of ANSI rendering and polling loops), not part of the
+  # API client. Including it would drag the figure down to roughly 28% and make
+  # the number say more about the demos than the library.
+  defp test_coverage do
+    [
+      # Note the threshold lives under :summary — a top-level :threshold key is
+      # silently ignored, which reads as passing when it is doing nothing.
+      summary: [threshold: 88],
+      ignore_modules: [~r/^ExBlofin\.Terminal\./]
+    ]
+  end
+
   defp deps do
     [
       {:req, "~> 0.5"},
@@ -51,14 +67,14 @@ defmodule ExBlofin.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE)
+      files: ~w(lib .formatter.exs mix.exs README.md CHANGELOG.md LICENSE)
     ]
   end
 
   defp docs do
     [
       main: "ExBlofin",
-      extras: ["README.md"],
+      extras: ["README.md", "CHANGELOG.md"],
       groups_for_modules: [
         "REST API": [
           ExBlofin.MarketData,
@@ -81,7 +97,8 @@ defmodule ExBlofin.MixProject do
           ExBlofin.WebSocket.CopyTradingConnection
         ],
         Client: [
-          ExBlofin.Client
+          ExBlofin.Client,
+          ExBlofin.Paths
         ]
       ]
     ]

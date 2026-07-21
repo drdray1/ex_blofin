@@ -8,7 +8,8 @@
 
 ```bash
 mix deps.get     # Install dependencies
-mix test          # Run all tests (163 tests, no external HTTP)
+mix test          # Run all tests (444 tests, no external HTTP)
+mix test --cover  # Coverage; fails under 88% (Terminal.* excluded)
 mix credo         # Run linter
 mix format        # Format code
 ```

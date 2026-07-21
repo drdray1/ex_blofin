@@ -4,6 +4,17 @@ defmodule ExBlofin.Tax do
 
   Provides functions for retrieving tax-related history including deposits,
   withdrawals, transfers, and trade records. All endpoints require authentication.
+
+  > #### Unverified paths {: .warning}
+  >
+  > These functions call an `/api/v1/tax/*` namespace that no longer appears in
+  > the BloFin documentation. The current docs cover the same ground by reusing
+  > `/api/v1/asset/*` and `/api/v1/trade/fills-history`. Those are plausibly
+  > *different* resources with different response shapes rather than renames, so
+  > they are deliberately excluded from the `ExBlofin.Paths` alias map and no
+  > automatic fallback applies here. If a call returns `{:error, :unauthorized}`
+  > with credentials you know are good, the path is likely retired — reach for
+  > `ExBlofin.Asset` instead.
   """
 
   alias ExBlofin.Client

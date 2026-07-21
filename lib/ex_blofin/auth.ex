@@ -11,7 +11,7 @@ defmodule ExBlofin.Auth do
 
     - `ACCESS-KEY` - API key
     - `ACCESS-SIGN` - Base64-encoded HMAC-SHA256 signature
-    - `ACCESS-TIMESTAMP` - ISO 8601 UTC timestamp with milliseconds
+    - `ACCESS-TIMESTAMP` - UTC millisecond epoch timestamp, e.g. `1704038400000`
     - `ACCESS-NONCE` - Unique identifier (random hex)
     - `ACCESS-PASSPHRASE` - API key passphrase
 

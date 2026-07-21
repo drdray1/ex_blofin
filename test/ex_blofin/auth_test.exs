@@ -95,11 +95,28 @@ defmodule ExBlofin.AuthTest do
   end
 
   describe "generate_timestamp/0" do
-    test "returns ISO 8601 format" do
+    # BloFin rejects anything else with error 152410: "The value of
+    # ACCESS-TIMESTAMP needs to be a millisecond timestamp, e.g: 1704038400000."
+    test "returns a millisecond epoch timestamp as a string" do
       ts = Auth.generate_timestamp()
+
       assert is_binary(ts)
-      # Should be parseable as ISO 8601
-      assert {:ok, _dt, _offset} = DateTime.from_iso8601(ts)
+      assert Regex.match?(~r/^\d+$/, ts)
+
+      ms = String.to_integer(ts)
+      now = System.system_time(:millisecond)
+      assert_in_delta ms, now, 5_000
+    end
+
+    test "is not an ISO 8601 string" do
+      # Guards against "fixing" this to match the prose in the moduledoc, which
+      # claimed ISO 8601 and was wrong.
+      assert {:error, :invalid_format} = DateTime.from_iso8601(Auth.generate_timestamp())
+    end
+
+    test "has millisecond precision, not seconds" do
+      # A seconds-epoch value would be 10 digits and silently fail signing.
+      assert String.length(Auth.generate_timestamp()) == 13
     end
   end
 

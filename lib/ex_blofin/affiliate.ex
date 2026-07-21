@@ -15,7 +15,7 @@ defmodule ExBlofin.Affiliate do
   @spec get_info(client()) :: response()
   def get_info(client) do
     client
-    |> Req.get(url: "/api/v1/affiliate/info")
+    |> Client.get("/api/v1/affiliate/basic")
     |> Client.handle_response()
   end
 

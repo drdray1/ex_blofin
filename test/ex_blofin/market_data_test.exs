@@ -109,6 +109,33 @@ defmodule ExBlofin.MarketDataTest do
     end
   end
 
+  describe "get_position_tiers/2" do
+    test "returns position tiers" do
+      Req.Test.expect(@stub_name, fn conn ->
+        assert conn.request_path == "/api/v1/market/position-tiers"
+        Req.Test.json(conn, Fixtures.sample_position_tiers_response())
+      end)
+
+      client = Fixtures.test_client(@stub_name)
+      assert {:ok, tiers} = MarketData.get_position_tiers(client, instId: "BTC-USDT")
+      assert [%{"symbol" => "BTC-USDT", "maxLeverage" => "125"} | _] = tiers
+    end
+
+    test "filters by marginMode" do
+      Req.Test.expect(@stub_name, fn conn ->
+        query = URI.decode_query(conn.query_string)
+        assert query["instId"] == "BTC-USDT"
+        assert query["marginMode"] == "cross"
+        Req.Test.json(conn, Fixtures.sample_position_tiers_response())
+      end)
+
+      client = Fixtures.test_client(@stub_name)
+
+      assert {:ok, _} =
+               MarketData.get_position_tiers(client, instId: "BTC-USDT", marginMode: "cross")
+    end
+  end
+
   describe "get_funding_rate/2" do
     test "returns funding rates" do
       Req.Test.expect(@stub_name, fn conn ->

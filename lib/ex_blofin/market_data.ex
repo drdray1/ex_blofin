@@ -150,6 +150,34 @@ defmodule ExBlofin.MarketData do
     |> Client.handle_response()
   end
 
+  @doc """
+  Retrieves position tier data (maximum leverage per position size bracket).
+
+  Each entry gives the maximum leverage and maintenance margin rate for one
+  position-size bracket, keyed by `"symbol"`.
+
+  ## Options
+
+    - `:marginMode` - "cross" or "isolated" (required; the API rejects the
+      request with code `152001` if omitted)
+    - `:instId` - Specific instrument ID; omit for all instruments
+
+  ## Examples
+
+      {:ok, tiers} = MarketData.get_position_tiers(client, marginMode: "cross")
+
+      {:ok, tiers} =
+        MarketData.get_position_tiers(client, instId: "BTC-USDT", marginMode: "cross")
+  """
+  @spec get_position_tiers(client(), keyword()) :: response()
+  def get_position_tiers(client, opts \\ []) do
+    params = build_query(opts, [:instId, :marginMode])
+
+    client
+    |> Req.get(url: "/api/v1/market/position-tiers", params: params)
+    |> Client.handle_response()
+  end
+
   # ===========================================================================
   # Funding Rate
   # ===========================================================================

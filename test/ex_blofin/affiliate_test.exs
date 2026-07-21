@@ -8,7 +8,7 @@ defmodule ExBlofin.AffiliateTest do
   describe "get_info/1" do
     test "returns affiliate info" do
       Req.Test.expect(@stub, fn conn ->
-        assert conn.request_path == "/api/v1/affiliate/info"
+        assert conn.request_path == "/api/v1/affiliate/basic"
         Req.Test.json(conn, Fixtures.sample_affiliate_info_response())
       end)
 
@@ -38,6 +38,40 @@ defmodule ExBlofin.AffiliateTest do
 
       client = Fixtures.test_client(@stub)
       assert {:ok, []} = Affiliate.get_invitees(client)
+    end
+  end
+
+  describe "get_sub_invitees/2" do
+    test "returns sub-affiliate invitees" do
+      Req.Test.expect(@stub, fn conn ->
+        assert conn.request_path == "/api/v1/affiliate/sub-invitees"
+        Req.Test.json(conn, Fixtures.success_response([]))
+      end)
+
+      client = Fixtures.test_client(@stub)
+      assert {:ok, []} = Affiliate.get_sub_invitees(client)
+    end
+
+    test "passes filters through" do
+      Req.Test.expect(@stub, fn conn ->
+        assert URI.decode_query(conn.query_string)["limit"] == "10"
+        Req.Test.json(conn, Fixtures.success_response([]))
+      end)
+
+      client = Fixtures.test_client(@stub)
+      assert {:ok, []} = Affiliate.get_sub_invitees(client, limit: "10")
+    end
+  end
+
+  describe "get_sub_affiliates/2" do
+    test "returns sub-affiliates" do
+      Req.Test.expect(@stub, fn conn ->
+        assert conn.request_path == "/api/v1/affiliate/sub-affiliates"
+        Req.Test.json(conn, Fixtures.success_response([]))
+      end)
+
+      client = Fixtures.test_client(@stub)
+      assert {:ok, []} = Affiliate.get_sub_affiliates(client)
     end
   end
 
