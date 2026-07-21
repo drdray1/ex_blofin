@@ -21,9 +21,12 @@ defmodule ExBlofin.Terminal.TickerDashboard do
 
   require Logger
 
+  alias ExBlofin.Terminal.{Format, Screen}
+
   alias ExBlofin.WebSocket.PublicConnection
 
   defstruct [
+    :prev_frame,
     :conn_pid,
     inst_ids: [],
     tickers: %{},
@@ -126,9 +129,8 @@ defmodule ExBlofin.Terminal.TickerDashboard do
         ""
       ]
       |> List.flatten()
-      |> Enum.map(fn line -> "\e[2K" <> line end)
 
-    IO.write("\e[H" <> Enum.join(lines, "\n") <> "\e[J")
+    Screen.write_frame(lines, state.prev_frame)
   end
 
   defp title_line do
@@ -211,45 +213,14 @@ defmodule ExBlofin.Terminal.TickerDashboard do
   defp sign(n) when n >= 0, do: "+"
   defp sign(_), do: "-"
 
-  defp parse_float(nil), do: 0.0
-
-  defp parse_float(s) when is_binary(s) do
-    case Float.parse(s) do
-      {f, _} -> f
-      :error -> 0.0
-    end
-  end
-
-  defp fmt_price(n) do
-    n |> :erlang.float_to_binary(decimals: 2) |> add_commas()
-  end
-
   defp fmt_pct(n) do
     "#{:erlang.float_to_binary(abs(n), decimals: 2)}%"
   end
 
-  defp fmt_int(n) do
-    n |> round() |> Integer.to_string() |> add_commas()
-  end
-
-  defp add_commas(s) when is_binary(s) do
-    case String.split(s, ".") do
-      [int_part] -> add_commas_int(int_part)
-      [int_part, dec] -> add_commas_int(int_part) <> "." <> dec
-    end
-  end
-
-  defp add_commas_int(s) do
-    s
-    |> String.reverse()
-    |> String.graphemes()
-    |> Enum.chunk_every(3)
-    |> Enum.join(",")
-    |> String.reverse()
-  end
-
-  defp pad_right(s, width) do
-    len = String.length(s)
-    if len >= width, do: s, else: s <> String.duplicate(" ", width - len)
-  end
+  # Shared implementations live in ExBlofin.Terminal.Format/Screen; these
+  # thin wrappers keep the local call sites unchanged.
+  defp parse_float(v), do: Format.parse_float(v)
+  defp fmt_price(v), do: Format.format_price(v)
+  defp fmt_int(v), do: Format.format_int(v)
+  defp pad_right(s, w), do: Format.pad_right(s, w)
 end

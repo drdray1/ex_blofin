@@ -22,9 +22,12 @@ defmodule ExBlofin.Terminal.TradeTape do
 
   require Logger
 
+  alias ExBlofin.Terminal.{Format, Screen}
+
   alias ExBlofin.WebSocket.PublicConnection
 
   defstruct [
+    :prev_frame,
     :conn_pid,
     inst_ids: [],
     trades: [],
@@ -147,9 +150,8 @@ defmodule ExBlofin.Terminal.TradeTape do
         footer_line(state)
       ]
       |> List.flatten()
-      |> Enum.map(fn line -> "\e[2K" <> line end)
 
-    IO.write("\e[H" <> Enum.join(lines, "\n") <> "\e[J")
+    Screen.write_frame(lines, state.prev_frame)
   end
 
   defp title_line(header) do
@@ -222,58 +224,17 @@ defmodule ExBlofin.Terminal.TradeTape do
 
   defp pct(n, total), do: "#{round(n / total * 100)}%"
 
-  defp parse_float(s) when is_binary(s) do
-    case Float.parse(s) do
-      {f, _} -> f
-      :error -> 0.0
-    end
+  # Shared implementations live in ExBlofin.Terminal.Format/Screen; these
+  # thin wrappers keep the local call sites unchanged.
+  defp parse_float(v), do: Format.parse_float(v)
+
+  defp format_number(v) when is_binary(v) do
+    # Unparseable values are echoed rather than shown as 0.00.
+    if Float.parse(v) == :error, do: v, else: Format.format_number(v)
   end
 
-  defp format_number(n) when is_float(n) do
-    n |> :erlang.float_to_binary(decimals: 2) |> add_commas()
-  end
-
-  defp format_number(s) when is_binary(s) do
-    case Float.parse(s) do
-      {f, _} -> format_number(f)
-      :error -> s
-    end
-  end
-
-  defp add_commas(n) when is_integer(n), do: add_commas(Integer.to_string(n))
-
-  defp add_commas(s) when is_binary(s) do
-    case String.split(s, ".") do
-      [int_part] -> add_commas_int(int_part)
-      [int_part, dec] -> add_commas_int(int_part) <> "." <> dec
-    end
-  end
-
-  defp add_commas_int(s) do
-    s
-    |> String.reverse()
-    |> String.graphemes()
-    |> Enum.chunk_every(3)
-    |> Enum.join(",")
-    |> String.reverse()
-  end
-
-  defp pad_right(s, width) do
-    len = String.length(s)
-    if len >= width, do: s, else: s <> String.duplicate(" ", width - len)
-  end
-
-  defp format_timestamp(nil), do: "--:--:--"
-
-  defp format_timestamp(ts) when is_binary(ts) do
-    case Integer.parse(ts) do
-      {ms, _} ->
-        ms
-        |> DateTime.from_unix!(:millisecond)
-        |> Calendar.strftime("%H:%M:%S")
-
-      :error ->
-        ts
-    end
-  end
+  defp format_number(v), do: Format.format_number(v)
+  defp pad_right(s, w), do: Format.pad_right(s, w)
+  defp format_timestamp(v), do: Format.format_timestamp(v)
+  defp add_commas(s), do: Format.add_commas(s)
 end

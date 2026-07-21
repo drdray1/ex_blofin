@@ -5,6 +5,62 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed — terminal UI
+
+- **The funding rate monitor never received a live update.** It matched the
+  atom `:"funding-rate"` while `ExBlofin.WebSocket.Message` emits
+  `:funding_rate`, so every event fell through to the catch-all. The pane
+  re-rendered once a second showing the REST snapshot taken at startup, with a
+  countdown frozen at `00:00:00`. Regression-tested.
+- **Sub-cent prices rendered as `0.00`.** Fifteen call sites hardcoded two
+  decimals, so DOGE, SHIB, PEPE and most of the long tail were unreadable —
+  worst in the Market Scanner, which iterates every instrument by design.
+  Precision is now chosen from the value's magnitude. Sizes are no longer
+  rounded to integers either, which had shown fractional contracts as `0`.
+- **Batched order book messages were silently dropped.** The handler matched a
+  single-element list `[book]`; anything longer hit the catch-all and vanished
+  while the display kept showing a green "Live" indicator.
+- **A reconnect could corrupt the order book indefinitely.** `action` is `nil`
+  when the payload arrives as a JSON array, and that defaulted to *incremental*,
+  so the snapshot BloFin re-sends after reconnecting was merged into the stale
+  book instead of replacing it. Only an explicit `"update"` is now treated as a
+  delta.
+- **Duplicate price levels.** Delta matching compared price *strings*, so
+  `"50000.0"` and `"50000.00"` became two rows that sorted adjacently and
+  double-counted depth. Compared numerically now.
+- **The scanner's refresh countdown was frozen**, because rendering was gated on
+  a `dirty` flag that only data could set. It now renders every tick.
+- **EMA overlays drew false flat lines.** Values outside the visible price range
+  were clamped to the top or bottom row rather than omitted. The EMA maths
+  itself was correct and is unchanged.
+- **Column alignment broke on coloured text.** Padding measured raw string
+  length, counting ANSI escape bytes as visible characters.
+
+### Changed — terminal UI
+
+- **Rendering now diffs frames.** Each pane previously rewrote the entire screen
+  on every tick. `ExBlofin.Terminal.Screen.write_frame/2` compares against the
+  previous frame and emits only the rows that changed. Measured on a live
+  28-row scanner frame with one row ticking: **3,467 bytes to 44, a 98.7%
+  reduction**; an unchanged frame now writes nothing at all. Frames are built as
+  iodata rather than joined into a binary, and a resize forces a full repaint.
+- Extracted `ExBlofin.Terminal.Format` and `ExBlofin.Terminal.Screen` from the
+  eight panes, which each carried their own copies. `parse_float/1` alone
+  existed 18 times with divergent clauses — one copy crashed on inputs the
+  others handled. These two modules are pure, directly tested, and included in
+  the coverage gate.
+
+### Notes
+
+Still outstanding in the TUI, from the same audit: grid layout math on narrow
+terminals (instruments are silently dropped when the terminal is too short),
+missing checksum validation on order book merges, no `SIGWINCH` handling in
+four panes, ANSI emitted even when output is not a TTY, and a world-writable
+state file in `scripts/dashboard.sh` that allows local command injection
+through `control.exs`.
+
 ## [0.2.0]
 
 Trues the library up against the current BloFin API documentation.
