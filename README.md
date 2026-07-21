@@ -131,7 +131,16 @@ Layout:
 
 ![Dashboard](assets/dashboard.png)
 
-Options: `--demo`, `--scanner` (replaces tickers with market scanner), `--bar BAR` (chart timeframe), `--kill`
+Options: `--demo`, `--scanner` (replaces tickers with market scanner), `--bar BAR` (chart timeframe), `--console` (adds a control pane, see below), `--top N`, `--max N`, `--kill`
+
+With `--console`, an interactive control pane lets you retarget every pane live without restarting the session:
+
+```
+add SOL-USDT      # add an instrument to all panes
+remove DOGE-USDT  # remove one
+bar 5m            # change chart timeframe
+list              # show current instruments and settings
+```
 
 ### Individual Tools
 
@@ -164,6 +173,7 @@ mix run scripts/funding.exs BTC-USDT ETH-USDT SOL-USDT
 
 ```bash
 mix run scripts/chart.exs BTC-USDT --bar 5m --height 20
+mix run scripts/chart.exs BTC-USDT --bar 1H --ema 9,21,50   # EMA overlays
 ```
 
 **Market Scanner** — all instruments ranked by volume/change
@@ -196,6 +206,8 @@ All tools support `--demo` for the sandbox environment. Press `Ctrl+C` twice to 
 | `ExBlofin.WebSocket.PublicConnection` | Public WS GenServer |
 | `ExBlofin.WebSocket.PrivateConnection` | Private WS GenServer (auth) |
 | `ExBlofin.WebSocket.CopyTradingConnection` | Copy trading WS GenServer (auth) |
+| `ExBlofin.Terminal.Format` | Shared value formatting (precision, ANSI-aware padding) |
+| `ExBlofin.Terminal.Screen` | Terminal size, cursor, and frame-diffing output |
 | `ExBlofin.Terminal.OrderBook` | Real-time order book display |
 | `ExBlofin.Terminal.MultiOrderBook` | Multi-instrument order book grid |
 | `ExBlofin.Terminal.TradeTape` | Scrolling trade tape |

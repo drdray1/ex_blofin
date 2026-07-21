@@ -37,16 +37,25 @@ defmodule ExBlofin.MixProject do
 
   # `mix test --cover` fails below the threshold.
   #
-  # ExBlofin.Terminal.* is excluded: it is the interactive TUI behind the demo
-  # scripts (~3,350 lines of ANSI rendering and polling loops), not part of the
-  # API client. Including it would drag the figure down to roughly 28% and make
-  # the number say more about the demos than the library.
+  # The interactive TUI panes are excluded: they are the demo scripts' render
+  # loops, driven by a live socket and a real terminal. Their pure logic has
+  # been extracted into ExBlofin.Terminal.Format and .Screen, which are NOT
+  # excluded and are covered directly.
   defp test_coverage do
     [
       # Note the threshold lives under :summary — a top-level :threshold key is
       # silently ignored, which reads as passing when it is doing nothing.
       summary: [threshold: 88],
-      ignore_modules: [~r/^ExBlofin\.Terminal\./]
+      ignore_modules: [
+        ExBlofin.Terminal.CandlestickChart,
+        ExBlofin.Terminal.FundingMonitor,
+        ExBlofin.Terminal.MarketScanner,
+        ExBlofin.Terminal.MultiCandlestickChart,
+        ExBlofin.Terminal.MultiOrderBook,
+        ExBlofin.Terminal.OrderBook,
+        ExBlofin.Terminal.TickerDashboard,
+        ExBlofin.Terminal.TradeTape
+      ]
     ]
   end
 

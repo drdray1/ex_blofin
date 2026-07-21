@@ -23,9 +23,12 @@ defmodule ExBlofin.Terminal.MarketScanner do
 
   require Logger
 
+  alias ExBlofin.Terminal.{Format, Screen}
+
   @poll_interval 5_000
 
   defstruct [
+    :prev_frame,
     :client,
     :poll_timer,
     sort_by: :volume,
@@ -103,9 +106,12 @@ defmodule ExBlofin.Terminal.MarketScanner do
      }}
   end
 
+  # Renders on every tick, not just when new data arrived: the "Refresh: Ns"
+  # countdown is time-derived, so gating on `dirty` froze it at the poll
+  # interval forever. Frame diffing makes the unchanged case free.
   @impl GenServer
-  def handle_info(:do_render, %{dirty: true} = state) do
-    if length(state.tickers) > 0, do: render(state)
+  def handle_info(:do_render, state) do
+    state = if state.tickers != [], do: %{state | prev_frame: render(state)}, else: state
     {:noreply, %{state | dirty: false}}
   end
 
@@ -185,9 +191,8 @@ defmodule ExBlofin.Terminal.MarketScanner do
         ""
       ]
       |> List.flatten()
-      |> Enum.map(fn line -> "\e[2K" <> line end)
 
-    IO.write("\e[H" <> Enum.join(lines, "\n") <> "\e[J")
+    Screen.write_frame(lines, state.prev_frame)
   end
 
   defp title_line(sort_by, countdown) do
@@ -293,23 +298,6 @@ defmodule ExBlofin.Terminal.MarketScanner do
   # Formatting Helpers
   # ============================================================================
 
-  defp parse_float(nil), do: 0.0
-
-  defp parse_float(s) when is_binary(s) do
-    case Float.parse(s) do
-      {f, _} -> f
-      :error -> 0.0
-    end
-  end
-
-  defp parse_float(n) when is_number(n), do: n / 1
-
-  defp fmt_price(n) when n == 0.0, do: "--"
-
-  defp fmt_price(n) do
-    n |> :erlang.float_to_binary(decimals: 2) |> add_commas()
-  end
-
   defp fmt_pct(n) do
     "#{:erlang.float_to_binary(abs(n), decimals: 2)}%"
   end
@@ -326,24 +314,10 @@ defmodule ExBlofin.Terminal.MarketScanner do
     :erlang.float_to_binary(n, decimals: 2)
   end
 
-  defp add_commas(s) when is_binary(s) do
-    case String.split(s, ".") do
-      [int_part] -> add_commas_int(int_part)
-      [int_part, dec] -> add_commas_int(int_part) <> "." <> dec
-    end
-  end
-
-  defp add_commas_int(s) do
-    s
-    |> String.reverse()
-    |> String.graphemes()
-    |> Enum.chunk_every(3)
-    |> Enum.join(",")
-    |> String.reverse()
-  end
-
-  defp pad_right(s, width) do
-    len = String.length(s)
-    if len >= width, do: s, else: s <> String.duplicate(" ", width - len)
-  end
+  # Shared implementations live in ExBlofin.Terminal.Format/Screen; these
+  # thin wrappers keep the local call sites unchanged.
+  defp parse_float(v), do: Format.parse_float(v)
+  defp fmt_price(n) when n == 0.0, do: "--"
+  defp fmt_price(v), do: Format.format_price(v)
+  defp pad_right(s, w), do: Format.pad_right(s, w)
 end

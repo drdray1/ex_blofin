@@ -22,6 +22,8 @@ defmodule ExBlofin.Terminal.OrderBook do
 
   require Logger
 
+  alias ExBlofin.Terminal.{Format, Screen}
+
   alias ExBlofin.WebSocket.PublicConnection
 
   # Fixed lines: blank + header + divider + col_header + divider + spread(3) + divider + footer + blank
@@ -29,6 +31,7 @@ defmodule ExBlofin.Terminal.OrderBook do
   @min_levels 2
 
   defstruct [
+    :prev_frame,
     :conn_pid,
     :inst_id,
     :last_update,
@@ -83,21 +86,31 @@ defmodule ExBlofin.Terminal.OrderBook do
     {:ok, state}
   end
 
+  # Matches any non-empty batch. The previous `[book]` pattern only matched a
+  # single-element list, so a batched message fell through to the catch-all and
+  # was dropped silently while the "Live" indicator stayed green.
   @impl GenServer
-  def handle_info({:blofin_event, channel, [book]}, state)
+  def handle_info({:blofin_event, channel, [_ | _] = books}, state)
       when channel in [:books, :books5] do
-    state = apply_book_update(state, book)
+    state = Enum.reduce(books, state, &apply_book_update(&2, &1))
     {:noreply, %{state | dirty: true}}
   end
 
   @impl GenServer
   def handle_info(:do_render, state) do
     size = get_terminal_size()
-    dirty = state.dirty or size != state.last_size
+    resized? = size != state.last_size
 
-    if dirty do
-      render(state)
-    end
+    # A resize invalidates the diff baseline: the previous frame was laid out
+    # for the old width, so force a full repaint rather than patching rows.
+    state = if resized?, do: %{state | prev_frame: nil}, else: state
+
+    state =
+      if state.dirty or resized? do
+        %{state | prev_frame: render(state)}
+      else
+        state
+      end
 
     {:noreply, %{state | dirty: false, last_size: size}}
   end
@@ -118,15 +131,20 @@ defmodule ExBlofin.Terminal.OrderBook do
   # Book State Management
   # ============================================================================
 
+  # Only an explicit "update" action is treated as incremental. `action` is nil
+  # whenever the payload arrives as a JSON array, and defaulting that to
+  # incremental meant the snapshot BloFin re-sends after a reconnect was merged
+  # into the stale book instead of replacing it — leaving price levels that had
+  # since disappeared on screen forever.
   defp apply_book_update(state, book) do
     case book.action do
-      "snapshot" ->
-        %{state | asks: sort_asks(book.asks), bids: sort_bids(book.bids), last_update: book.ts}
-
-      _ ->
+      "update" ->
         asks = apply_deltas(state.asks, book.asks, :asc)
         bids = apply_deltas(state.bids, book.bids, :desc)
         %{state | asks: asks, bids: bids, last_update: book.ts}
+
+      _snapshot_or_unknown ->
+        %{state | asks: sort_asks(book.asks), bids: sort_bids(book.bids), last_update: book.ts}
     end
   end
 
@@ -136,9 +154,10 @@ defmodule ExBlofin.Terminal.OrderBook do
         [price | _] = delta
         size = Enum.at(delta, 1, "0")
 
-        acc = Enum.reject(acc, fn [p | _] -> p == price end)
+        target = Format.parse_float(price)
+        acc = Enum.reject(acc, fn [p | _] -> Format.parse_float(p) == target end)
 
-        if size == "0" do
+        if Format.parse_float(size) == 0.0 do
           acc
         else
           [delta | acc]
@@ -157,13 +176,6 @@ defmodule ExBlofin.Terminal.OrderBook do
 
   defp sort_bids(levels) do
     Enum.sort_by(levels, fn [price | _] -> parse_float(price) end, :desc)
-  end
-
-  defp parse_float(s) when is_binary(s) do
-    case Float.parse(s) do
-      {f, _} -> f
-      :error -> 0.0
-    end
   end
 
   # ============================================================================
@@ -207,10 +219,8 @@ defmodule ExBlofin.Terminal.OrderBook do
         ""
       ]
       |> List.flatten()
-      |> Enum.map(fn line -> "\e[2K" <> line end)
 
-    # Cursor home, draw lines, clear remaining screen below
-    IO.write("\e[H" <> Enum.join(lines, "\n") <> "\e[J")
+    Screen.write_frame(lines, state.prev_frame)
   end
 
   defp header_line(inst_id, ts, width) do
@@ -271,22 +281,6 @@ defmodule ExBlofin.Terminal.OrderBook do
   # Terminal Size
   # ============================================================================
 
-  defp get_terminal_size do
-    cols =
-      case :io.columns() do
-        {:ok, c} -> c
-        _ -> 80
-      end
-
-    rows =
-      case :io.rows() do
-        {:ok, r} -> r
-        _ -> 24
-      end
-
-    {rows, cols}
-  end
-
   defp effective_levels(state) do
     if state.levels do
       state.levels
@@ -316,72 +310,18 @@ defmodule ExBlofin.Terminal.OrderBook do
     Enum.reduce(levels, 0.0, fn [_, size_s | _], acc -> acc + parse_float(size_s) end)
   end
 
-  defp format_price(n) when is_float(n) do
-    n
-    |> :erlang.float_to_binary(decimals: 2)
-    |> add_commas()
-  end
-
-  defp format_number(n) when is_float(n) do
-    n
-    |> :erlang.float_to_binary(decimals: 2)
-    |> add_commas()
-  end
-
-  defp format_int(n) when is_float(n) do
-    n
-    |> round()
-    |> Integer.to_string()
-    |> add_commas()
-  end
-
   defp format_pct(n) when is_float(n) do
     "#{:erlang.float_to_binary(n, decimals: 4)}%"
   end
 
-  defp add_commas(s) when is_binary(s) do
-    case String.split(s, ".") do
-      [int_part] -> add_commas_int(int_part)
-      [int_part, dec_part] -> add_commas_int(int_part) <> "." <> dec_part
-    end
-  end
-
-  defp add_commas_int(s) do
-    s
-    |> String.reverse()
-    |> String.graphemes()
-    |> Enum.chunk_every(3)
-    |> Enum.join(",")
-    |> String.reverse()
-  end
-
-  defp pad_right(s, width) do
-    len = String.length(s)
-    if len >= width, do: s, else: s <> String.duplicate(" ", width - len)
-  end
-
-  defp pad_center(s, width) do
-    len = String.length(s)
-    if len >= width, do: s, else: do_pad_center(s, width, len)
-  end
-
-  defp do_pad_center(s, width, len) do
-    left = div(width - len, 2)
-    right = width - len - left
-    String.duplicate(" ", left) <> s <> String.duplicate(" ", right)
-  end
-
-  defp format_timestamp(nil), do: "--:--:--"
-
-  defp format_timestamp(ts) when is_binary(ts) do
-    case Integer.parse(ts) do
-      {ms, _} ->
-        ms
-        |> DateTime.from_unix!(:millisecond)
-        |> Calendar.strftime("%H:%M:%S")
-
-      :error ->
-        ts
-    end
-  end
+  # Shared implementations live in ExBlofin.Terminal.Format/Screen; these
+  # thin wrappers keep the local call sites unchanged.
+  defp parse_float(v), do: Format.parse_float(v)
+  defp format_price(v), do: Format.format_price(v)
+  defp format_int(v), do: Format.format_int(v)
+  defp format_number(v), do: Format.format_number(v)
+  defp pad_right(s, w), do: Format.pad_right(s, w)
+  defp pad_center(s, w), do: Format.pad_center(s, w)
+  defp format_timestamp(v), do: Format.format_timestamp(v)
+  defp get_terminal_size, do: Screen.size()
 end

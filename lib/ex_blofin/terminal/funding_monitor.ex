@@ -22,9 +22,12 @@ defmodule ExBlofin.Terminal.FundingMonitor do
 
   require Logger
 
+  alias ExBlofin.Terminal.{Format, Screen}
+
   alias ExBlofin.WebSocket.PublicConnection
 
   defstruct [
+    :prev_frame,
     :conn_pid,
     inst_ids: [],
     rates: %{},
@@ -85,8 +88,13 @@ defmodule ExBlofin.Terminal.FundingMonitor do
     {:ok, state}
   end
 
+  # The channel is named "funding-rate" but ExBlofin.WebSocket.Message emits it
+  # as the underscored atom :funding_rate. Matching the hyphenated form meant
+  # every live update fell through to the catch-all below and the pane showed
+  # only the REST snapshot taken at startup — indefinitely, and with no
+  # indication anything was wrong.
   @impl GenServer
-  def handle_info({:blofin_event, :"funding-rate", events}, state) do
+  def handle_info({:blofin_event, :funding_rate, events}, state) do
     rates =
       Enum.reduce(events, state.rates, fn event, acc ->
         Map.put(acc, event.inst_id, event)
@@ -97,10 +105,14 @@ defmodule ExBlofin.Terminal.FundingMonitor do
 
   @impl GenServer
   def handle_info(:do_render, state) do
-    # Always render on tick to update countdown timers
-    if map_size(state.rates) > 0 do
-      render(state)
-    end
+    # Renders every tick so the countdown advances. Frame diffing makes an
+    # unchanged frame free, so this costs nothing when nothing has moved.
+    state =
+      if map_size(state.rates) > 0 do
+        %{state | prev_frame: render(state)}
+      else
+        state
+      end
 
     {:noreply, %{state | dirty: false}}
   end
@@ -168,9 +180,8 @@ defmodule ExBlofin.Terminal.FundingMonitor do
         ""
       ]
       |> List.flatten()
-      |> Enum.map(fn line -> "\e[2K" <> line end)
 
-    IO.write("\e[H" <> Enum.join(lines, "\n") <> "\e[J")
+    Screen.write_frame(lines, state.prev_frame)
   end
 
   defp title_line do
@@ -261,15 +272,6 @@ defmodule ExBlofin.Terminal.FundingMonitor do
   defp rate_color(rate) when rate > 0, do: IO.ANSI.red()
   defp rate_color(_), do: IO.ANSI.faint()
 
-  defp parse_float(nil), do: 0.0
-
-  defp parse_float(s) when is_binary(s) do
-    case Float.parse(s) do
-      {f, _} -> f
-      :error -> 0.0
-    end
-  end
-
   defp fmt_rate(n) do
     sign = if n >= 0, do: "+", else: ""
     "#{sign}#{:erlang.float_to_binary(n * 100, decimals: 4)}%"
@@ -301,8 +303,8 @@ defmodule ExBlofin.Terminal.FundingMonitor do
     end
   end
 
-  defp pad_right(s, width) do
-    len = String.length(s)
-    if len >= width, do: s, else: s <> String.duplicate(" ", width - len)
-  end
+  # Shared implementations live in ExBlofin.Terminal.Format/Screen; these
+  # thin wrappers keep the local call sites unchanged.
+  defp parse_float(v), do: Format.parse_float(v)
+  defp pad_right(s, w), do: Format.pad_right(s, w)
 end

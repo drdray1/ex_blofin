@@ -22,6 +22,8 @@ defmodule ExBlofin.Terminal.CandlestickChart do
 
   require Logger
 
+  alias ExBlofin.Terminal.{Format, Screen}
+
   alias ExBlofin.WebSocket.PublicConnection
 
   @label_w 12
@@ -36,6 +38,7 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   @ema_char "*"
 
   defstruct [
+    :prev_frame,
     :conn_pid,
     :inst_id,
     :bar,
@@ -144,11 +147,18 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   @impl GenServer
   def handle_info(:do_render, state) do
     size = get_terminal_size()
-    dirty = state.dirty or size != state.last_size
+    resized? = size != state.last_size
 
-    if dirty and length(state.candles) > 0 do
-      render(state)
-    end
+    # A resize invalidates the diff baseline: the previous frame was laid out
+    # for the old width, so force a full repaint rather than patching rows.
+    state = if resized?, do: %{state | prev_frame: nil}, else: state
+
+    state =
+      if (state.dirty or resized?) and state.candles != [] do
+        %{state | prev_frame: render(state)}
+      else
+        state
+      end
 
     {:noreply, %{state | dirty: false, last_size: size}}
   end
@@ -276,7 +286,7 @@ defmodule ExBlofin.Terminal.CandlestickChart do
             ema_values
             |> Enum.map(fn
               nil -> nil
-              price -> price_to_row(price, height, min_low, price_range_val)
+              price -> ema_price_to_row(price, height, min_low, price_range_val)
             end)
             |> List.to_tuple()
           end)
@@ -318,9 +328,8 @@ defmodule ExBlofin.Terminal.CandlestickChart do
         ""
       ]
       |> List.flatten()
-      |> Enum.map(fn line -> "\e[2K" <> line end)
 
-    IO.write("\e[H" <> Enum.join(lines, "\n") <> "\e[J")
+    Screen.write_frame(lines, state.prev_frame)
   end
 
   defp title_line(state) do
@@ -399,6 +408,15 @@ defmodule ExBlofin.Terminal.CandlestickChart do
       c3 <> "#{@ema_char} EMA #{p3}" <> reset
   end
 
+  # An EMA can legitimately sit outside the visible high/low after a sharp move.
+  # price_to_row/4 clamps, which is right for candles (their own extremes define
+  # the range) but wrong here: it pinned the EMA to the top or bottom row and
+  # drew a flat line that reads as real data. Out-of-range values are dropped.
+  defp ema_price_to_row(price, height, min_low, range) do
+    row = round((height - 1) * (1.0 - (price - min_low) / range))
+    if row >= 0 and row <= height - 1, do: row, else: nil
+  end
+
   defp price_to_row(price, height, min_low, range) do
     row = (height - 1) * (1.0 - (price - min_low) / range)
     round(row) |> max(0) |> min(height - 1)
@@ -442,22 +460,6 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   # Terminal Size
   # ============================================================================
 
-  defp get_terminal_size do
-    cols =
-      case :io.columns() do
-        {:ok, c} -> c
-        _ -> 80
-      end
-
-    rows =
-      case :io.rows() do
-        {:ok, r} -> r
-        _ -> 24
-      end
-
-    {rows, cols}
-  end
-
   defp effective_dims(state) do
     {rows, cols} = get_terminal_size()
     height = state.chart_height || max(rows - @overhead_rows, 5)
@@ -469,61 +471,12 @@ defmodule ExBlofin.Terminal.CandlestickChart do
   # Formatting Helpers
   # ============================================================================
 
-  defp parse_float(n) when is_float(n), do: n
-  defp parse_float(n) when is_integer(n), do: n / 1
-
-  defp parse_float(s) when is_binary(s) do
-    case Float.parse(s) do
-      {f, _} -> f
-      :error -> 0.0
-    end
-  end
-
-  defp parse_float(_), do: 0.0
-
-  defp fmt_price(n) do
-    n |> :erlang.float_to_binary(decimals: 2) |> add_commas()
-  end
-
-  defp fmt_int(n) do
-    n |> round() |> Integer.to_string() |> add_commas()
-  end
-
-  defp add_commas(s) when is_binary(s) do
-    case String.split(s, ".") do
-      [int_part] -> add_commas_int(int_part)
-      [int_part, dec] -> add_commas_int(int_part) <> "." <> dec
-    end
-  end
-
-  defp add_commas_int(s) do
-    s
-    |> String.reverse()
-    |> String.graphemes()
-    |> Enum.chunk_every(3)
-    |> Enum.join(",")
-    |> String.reverse()
-  end
-
-  defp pad_left(s, width) do
-    len = String.length(s)
-
-    if len >= width,
-      do: s,
-      else: String.duplicate(" ", width - len) <> s
-  end
-
-  defp format_timestamp(nil), do: "--:--:--"
-
-  defp format_timestamp(ts) when is_binary(ts) do
-    case Integer.parse(ts) do
-      {ms, _} ->
-        ms
-        |> DateTime.from_unix!(:millisecond)
-        |> Calendar.strftime("%H:%M:%S")
-
-      :error ->
-        ts
-    end
-  end
+  # Shared implementations live in ExBlofin.Terminal.Format/Screen; these
+  # thin wrappers keep the local call sites unchanged.
+  defp parse_float(v), do: Format.parse_float(v)
+  defp fmt_price(v), do: Format.format_price(v)
+  defp fmt_int(v), do: Format.format_int(v)
+  defp pad_left(s, w), do: Format.pad_left(s, w)
+  defp format_timestamp(v), do: Format.format_timestamp(v)
+  defp get_terminal_size, do: Screen.size()
 end
