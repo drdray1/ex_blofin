@@ -605,7 +605,9 @@ defmodule ExBlofin.WebSocket.Message do
       close: Enum.at(d, 4),
       vol: Enum.at(d, 5),
       vol_currency: Enum.at(d, 6),
-      confirm: Enum.at(d, 7)
+      # WS candle arrays are [ts, o, h, l, c, vol, volCurrency,
+      # volCurrencyQuote, confirm] — confirm is index 8, not 7
+      confirm: Enum.at(d, 8)
     }
   end
 
