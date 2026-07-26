@@ -595,6 +595,8 @@ defmodule ExBlofin.WebSocket.Message do
     }
   end
 
+  # WS candle arrays are [ts, open, high, low, close, vol, volCurrency,
+  # volCurrencyQuote, confirm] — confirm is index 8; index 7 is quote turnover.
   defp parse_candle(d, inst_id) when is_list(d) do
     %CandleEvent{
       inst_id: inst_id,
@@ -605,7 +607,7 @@ defmodule ExBlofin.WebSocket.Message do
       close: Enum.at(d, 4),
       vol: Enum.at(d, 5),
       vol_currency: Enum.at(d, 6),
-      confirm: Enum.at(d, 7)
+      confirm: Enum.at(d, 8)
     }
   end
 

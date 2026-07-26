@@ -202,7 +202,17 @@ defmodule ExBlofin.WebSocket.MessageTest do
         Jason.encode!(%{
           "arg" => %{"channel" => "candle1m", "instId" => "BTC-USDT"},
           "data" => [
-            ["1697021343571", "50000.0", "50500.0", "49500.0", "50200.0", "100.5", "5025000", "1"]
+            [
+              "1697021343571",
+              "50000.0",
+              "50500.0",
+              "49500.0",
+              "50200.0",
+              "100.5",
+              "5025000",
+              "5.025",
+              "1"
+            ]
           ]
         })
 
@@ -216,7 +226,31 @@ defmodule ExBlofin.WebSocket.MessageTest do
       assert candle.close == "50200.0"
       assert candle.vol == "100.5"
       assert candle.vol_currency == "5025000"
+      # confirm is the 9th column — index 7 is quote turnover, not the flag
       assert candle.confirm == "1"
+    end
+
+    test "in-progress candles parse with confirm 0" do
+      raw =
+        Jason.encode!(%{
+          "arg" => %{"channel" => "candle5m", "instId" => "BTC-USDT"},
+          "data" => [
+            [
+              "1785104100000",
+              "65187.2",
+              "65210",
+              "65179.8",
+              "65190.1",
+              "4156.1",
+              "4.1561",
+              "270972.87716",
+              "0"
+            ]
+          ]
+        })
+
+      assert {:ok, :candle5m, [candle]} = Message.parse(raw)
+      assert candle.confirm == "0"
     end
   end
 
