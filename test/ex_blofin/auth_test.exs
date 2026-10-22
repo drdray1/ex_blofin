@@ -95,11 +95,11 @@ defmodule ExBlofin.AuthTest do
   end
 
   describe "generate_timestamp/0" do
-    test "returns ISO 8601 format" do
+    # BloFin rejects anything but a millisecond epoch (152410).
+    test "returns a millisecond epoch" do
       ts = Auth.generate_timestamp()
-      assert is_binary(ts)
-      # Should be parseable as ISO 8601
-      assert {:ok, _dt, _offset} = DateTime.from_iso8601(ts)
+      assert {ms, ""} = Integer.parse(ts)
+      assert abs(ms - System.system_time(:millisecond)) < 5_000
     end
   end
 

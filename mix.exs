@@ -1,7 +1,7 @@
 defmodule ExBlofin.MixProject do
   use Mix.Project
 
-  @version "0.1.7"
+  @version "0.1.8"
   @source_url "https://github.com/drdray1/ex_blofin"
 
   def project do

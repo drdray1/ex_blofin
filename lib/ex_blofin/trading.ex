@@ -156,7 +156,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :orderType, :state, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/order-history", params: params)
+    |> Req.get(url: "/api/v1/trade/orders-history", params: params)
     |> Client.handle_response()
   end
 
@@ -220,7 +220,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :tpslId, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/orders-tpsl", params: params)
+    |> Req.get(url: "/api/v1/trade/orders-tpsl-pending", params: params)
     |> Client.handle_response()
   end
 
@@ -256,7 +256,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/order-tpsl-history", params: params)
+    |> Req.get(url: "/api/v1/trade/orders-tpsl-history", params: params)
     |> Client.handle_response()
   end
 
@@ -360,7 +360,7 @@ defmodule ExBlofin.Trading do
     params = build_query(opts, [:instId, :orderId, :before, :after, :limit])
 
     client
-    |> Req.get(url: "/api/v1/trade/trade-history", params: params)
+    |> Req.get(url: "/api/v1/trade/fills-history", params: params)
     |> Client.handle_response()
   end
 
