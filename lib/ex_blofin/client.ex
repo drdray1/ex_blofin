@@ -402,6 +402,41 @@ defmodule ExBlofin.Client do
   end
 
   @doc """
+  Turns per-item failures inside a successful response into an error.
+
+  Batch and place endpoints answer top-level `"code" => "0"` with a failing
+  item inside `data` (e.g. `"code" => "1120x"`, "Position does not exist").
+  Returns the first failing item as `{:error, {:api_error, code, msg}}` and
+  passes everything else through.
+  """
+  @spec check_items(response()) :: response()
+  def check_items({:ok, items} = ok) when is_list(items) do
+    case Enum.find(items, &item_failed?/1) do
+      nil -> ok
+      item -> {:error, {:api_error, item["code"], item["msg"]}}
+    end
+  end
+
+  def check_items({:ok, %{} = item} = ok) do
+    if item_failed?(item), do: {:error, {:api_error, item["code"], item["msg"]}}, else: ok
+  end
+
+  def check_items(other), do: other
+
+  defp item_failed?(%{"code" => code}) when code not in ["0", "", nil], do: true
+  defp item_failed?(_item), do: false
+
+  @doc """
+  The BloFin error code of an error result as a string, or `nil`.
+
+      Client.error_code({:error, {:api_error, "110019", "Setting failed"}})
+      #=> "110019"
+  """
+  @spec error_code(term()) :: String.t() | nil
+  def error_code({:error, {:api_error, code, _msg}}) when is_binary(code), do: code
+  def error_code(_other), do: nil
+
+  @doc """
   Performs a health check by validating credentials.
   """
   @spec healthcheck(client()) :: :ok | {:error, term()}

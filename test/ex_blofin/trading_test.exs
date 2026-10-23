@@ -158,6 +158,68 @@ defmodule ExBlofin.TradingTest do
     end
   end
 
+  describe "signing a GET with parameters" do
+    # BloFin signs requestPath with its query string; signing the bare path
+    # failed every parameterised GET with 152409 "Signature verification failed".
+    test "the signature covers the path and the query string" do
+      Req.Test.expect(@stub, fn conn ->
+        assert conn.request_path == "/api/v1/trade/order-detail"
+        assert conn.query_string =~ "instId=BTC-USDT"
+
+        [sign] = Plug.Conn.get_req_header(conn, "access-sign")
+        [timestamp] = Plug.Conn.get_req_header(conn, "access-timestamp")
+        [nonce] = Plug.Conn.get_req_header(conn, "access-nonce")
+
+        expected =
+          ExBlofin.Auth.compute_signature(
+            Fixtures.sample_secret_key(),
+            conn.request_path <> "?" <> conn.query_string,
+            "GET",
+            timestamp,
+            nonce
+          )
+
+        assert sign == expected
+        Req.Test.json(conn, %{"code" => "0", "data" => [%{"orderId" => "1"}]})
+      end)
+
+      client = Fixtures.test_client(@stub)
+      assert {:ok, _} = Trading.get_order_detail(client, instId: "BTC-USDT", orderId: "1")
+    end
+
+    test "a GET without parameters signs the bare path" do
+      Req.Test.expect(@stub, fn conn ->
+        [sign] = Plug.Conn.get_req_header(conn, "access-sign")
+        [timestamp] = Plug.Conn.get_req_header(conn, "access-timestamp")
+        [nonce] = Plug.Conn.get_req_header(conn, "access-nonce")
+
+        assert sign ==
+                 ExBlofin.Auth.compute_signature(
+                   Fixtures.sample_secret_key(),
+                   conn.request_path,
+                   "GET",
+                   timestamp,
+                   nonce
+                 )
+
+        Req.Test.json(conn, %{"code" => "0", "data" => []})
+      end)
+
+      assert {:ok, _} = Trading.get_tpsl_orders(Fixtures.test_client(@stub))
+    end
+  end
+
+  describe "get_tpsl_order_history/2" do
+    test "reads the documented history path" do
+      Req.Test.expect(@stub, fn conn ->
+        assert conn.request_path == "/api/v1/trade/orders-tpsl-history"
+        Req.Test.json(conn, %{"code" => "0", "data" => []})
+      end)
+
+      assert {:ok, _} = Trading.get_tpsl_order_history(Fixtures.test_client(@stub))
+    end
+  end
+
   describe "get_tpsl_orders/2" do
     test "returns TP/SL orders" do
       Req.Test.expect(@stub, fn conn ->

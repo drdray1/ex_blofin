@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Multi-Position (merged from the 0.1.x line, released as 0.1.9)
+
+- `Account.position_mode/1` reads `positionMode` + `multiPosition` as a typed
+  map; `set_position_mode/2` documents `multiPosition`.
+- `Account.get_positions/2` accepts `:positionId`; `get_positions_history/2`
+  accepts `:positionId`, `:state`, `:begin` and `:end`.
+- `Client.check_items/1` surfaces a failing item inside a `code "0"`
+  envelope; `Client.error_code/1` extracts a BloFin error code (e.g. 110006,
+  110019 on leverage changes).
+- WebSocket `OrderEvent` and `AlgoOrderEvent` carry `position_id`.
+- Docs: `positionId` on place/TP-SL/algo/close-position and per-position
+  leverage; `reduceOnly` is ignored in hedge mode.
+- Also brings in 0.1.8 (signed GET query strings, documented TP/SL and
+  history paths) and 0.1.7 (WS candle confirm at index 8), which main lacked.
+
 ### Fixed — terminal UI
 
 - **The funding rate monitor never received a live update.** It matched the
