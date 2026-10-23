@@ -49,7 +49,11 @@ defmodule ExBlofin.Trading do
     - `"orderType"` - "market", "limit", "post_only", "fok", "ioc" (required)
     - `"size"` - Number of contracts (required)
     - `"price"` - Order price (required for limit orders)
-    - `"reduceOnly"` - "true" or "false" (optional)
+    - `"reduceOnly"` - "true" or "false" (optional; ignored in hedge mode)
+    - `"positionId"` - Multi-Position mode only: required on closing orders;
+      on opening orders pass it to add to that position, omit it to open a
+      new one. The new position's id is not in the place response — read it
+      from Order Detail or the orders channel once filled.
     - `"clientOrderId"` - User-assigned ID, max 32 chars (optional)
     - `"tpTriggerPrice"` - Take-profit trigger (optional)
     - `"tpOrderPrice"` - TP execution price, "-1" for market (optional)
@@ -178,6 +182,8 @@ defmodule ExBlofin.Trading do
     - `"tpOrderPrice"` - TP execution price, "-1" for market
     - `"slTriggerPrice"` - Stop-loss trigger price
     - `"slOrderPrice"` - SL execution price, "-1" for market
+    - `"positionId"` - Required in Multi-Position mode: the position the
+      order is bound to ("size" "-1" then means that whole position)
   """
   @spec place_tpsl_order(client(), map()) :: response()
   def place_tpsl_order(client, params) do
@@ -278,6 +284,7 @@ defmodule ExBlofin.Trading do
     - `"triggerPrice"` - Trigger price (required)
     - `"orderPrice"` - Execution price, "-1" for market (optional)
     - `"attachAlgoOrders"` - Attached TP/SL orders (optional)
+    - `"positionId"` - Required in Multi-Position mode
   """
   @spec place_algo_order(client(), map()) :: response()
   def place_algo_order(client, params) do
@@ -387,6 +394,8 @@ defmodule ExBlofin.Trading do
     - `"marginMode"` - "cross" or "isolated" (required)
     - `"positionSide"` - "net", "long", or "short"
     - `"clientOrderId"` - Client order ID (optional)
+    - `"positionId"` - Required in Multi-Position mode; there is no
+      close-all, so close each position separately
   """
   @spec close_position(client(), map()) :: response()
   def close_position(client, params) do

@@ -44,6 +44,85 @@ defmodule ExBlofin.AccountTest do
     end
   end
 
+  describe "get_positions/2 Multi-Position" do
+    test "filters by positionId" do
+      Req.Test.expect(@stub, fn conn ->
+        assert URI.decode_query(conn.query_string)["positionId"] == "7982"
+        Req.Test.json(conn, Fixtures.success_response([%{"positionId" => "7982"}]))
+      end)
+
+      client = Fixtures.test_client(@stub)
+
+      assert {:ok, [%{"positionId" => "7982"}]} =
+               Account.get_positions(client, positionId: "7982")
+    end
+  end
+
+  describe "get_positions_history/2" do
+    test "queries closed positions with filters" do
+      Req.Test.expect(@stub, fn conn ->
+        assert conn.request_path == "/api/v1/account/positions-history"
+        query = URI.decode_query(conn.query_string)
+        assert query["positionId"] == "7982"
+        assert query["state"] == "closed"
+        refute Map.has_key?(query, "bogus")
+
+        Req.Test.json(
+          conn,
+          Fixtures.success_response([%{"positionId" => "7982", "realizedPnl" => "0.7"}])
+        )
+      end)
+
+      client = Fixtures.test_client(@stub)
+
+      assert {:ok, [%{"realizedPnl" => "0.7"}]} =
+               Account.get_positions_history(client,
+                 positionId: "7982",
+                 state: "closed",
+                 bogus: "x"
+               )
+    end
+  end
+
+  describe "position_mode/1" do
+    test "reads hedge mode with Multi-Position on" do
+      Req.Test.expect(@stub, fn conn ->
+        assert conn.request_path == "/api/v1/account/position-mode"
+
+        Req.Test.json(
+          conn,
+          Fixtures.success_response(%{
+            "positionMode" => "long_short_mode",
+            "multiPosition" => "true"
+          })
+        )
+      end)
+
+      client = Fixtures.test_client(@stub)
+
+      assert {:ok, %{position_mode: "long_short_mode", multi_position: true}} =
+               Account.position_mode(client)
+    end
+
+    test "net mode without the field is not Multi-Position" do
+      Req.Test.expect(@stub, fn conn ->
+        Req.Test.json(conn, Fixtures.success_response([%{"positionMode" => "net_mode"}]))
+      end)
+
+      client = Fixtures.test_client(@stub)
+
+      assert {:ok, %{position_mode: "net_mode", multi_position: false}} =
+               Account.position_mode(client)
+    end
+
+    test "an unexpected body is an error" do
+      Req.Test.expect(@stub, fn conn -> Req.Test.json(conn, Fixtures.success_response([])) end)
+
+      client = Fixtures.test_client(@stub)
+      assert {:error, {:unexpected_response, []}} = Account.position_mode(client)
+    end
+  end
+
   describe "get_margin_mode/2" do
     test "returns margin mode" do
       Req.Test.expect(@stub, fn conn ->

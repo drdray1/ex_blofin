@@ -143,4 +143,40 @@ defmodule ExBlofin.ClientTest do
       assert %Req.Request{} = client
     end
   end
+
+  describe "check_items/1" do
+    test "surfaces a failing item inside a successful envelope" do
+      result =
+        {:ok,
+         [
+           %{"orderId" => "1", "code" => "0"},
+           %{"orderId" => "", "code" => "1120x", "msg" => "Position does not exist"}
+         ]}
+
+      assert {:error, {:api_error, "1120x", "Position does not exist"}} =
+               ExBlofin.Client.check_items(result)
+    end
+
+    test "passes clean items, single maps and errors through" do
+      ok = {:ok, [%{"orderId" => "1", "code" => "0"}, %{"orderId" => "2"}]}
+      assert ExBlofin.Client.check_items(ok) == ok
+
+      assert ExBlofin.Client.check_items({:ok, %{"positionId" => ""}}) ==
+               {:ok, %{"positionId" => ""}}
+
+      assert {:error, {:api_error, "110019", "x"}} =
+               ExBlofin.Client.check_items({:ok, %{"code" => "110019", "msg" => "x"}})
+
+      assert ExBlofin.Client.check_items({:error, :timeout}) == {:error, :timeout}
+    end
+  end
+
+  describe "error_code/1" do
+    test "returns the BloFin code of an api error" do
+      assert ExBlofin.Client.error_code({:error, {:api_error, "110006", "pending"}}) == "110006"
+      assert ExBlofin.Client.error_code({:error, {:api_error, 500, "boom"}}) == nil
+      assert ExBlofin.Client.error_code({:error, :timeout}) == nil
+      assert ExBlofin.Client.error_code({:ok, []}) == nil
+    end
+  end
 end

@@ -128,6 +128,9 @@ defmodule ExBlofin do
   @doc "Returns current positions."
   defdelegate get_positions(client, opts \\ []), to: Account
 
+  @doc "Returns closed positions with realized PnL."
+  defdelegate get_positions_history(client, opts \\ []), to: Account
+
   @doc "Returns margin mode."
   defdelegate get_margin_mode(client, opts \\ []), to: Account
 
@@ -139,6 +142,9 @@ defmodule ExBlofin do
 
   @doc "Sets position mode."
   defdelegate set_position_mode(client, params), to: Account
+
+  @doc "Returns the position mode as a typed map."
+  defdelegate position_mode(client), to: Account
 
   @doc "Returns leverage info."
   defdelegate get_batch_leverage_info(client, opts \\ []), to: Account
