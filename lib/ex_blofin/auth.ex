@@ -17,7 +17,9 @@ defmodule ExBlofin.Auth do
 
   ## Signature Algorithm
 
-  1. Build pre-hash string: `requestPath + METHOD + timestamp + nonce + body`
+  1. Build pre-hash string: `requestPath + METHOD + timestamp + nonce + body`,
+     where `requestPath` includes the query string of a GET
+     (`/api/v1/trade/order-detail?instId=BTC-USDT&orderId=1`)
   2. Compute HMAC-SHA256 with secret key
   3. Hex-encode the result
   4. Base64-encode the hex string
@@ -112,10 +114,19 @@ defmodule ExBlofin.Auth do
     end
   end
 
+  # BloFin signs GET parameters as part of requestPath. Signing the bare path
+  # made every authenticated GET with parameters fail with 152409
+  # "Signature verification failed".
   defp extract_path(request) do
     case request.url do
-      %URI{path: path} when is_binary(path) -> path
-      _ -> "/"
+      %URI{path: path, query: query} when is_binary(path) and query not in [nil, ""] ->
+        path <> "?" <> query
+
+      %URI{path: path} when is_binary(path) ->
+        path
+
+      _ ->
+        "/"
     end
   end
 

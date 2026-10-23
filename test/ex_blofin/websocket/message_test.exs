@@ -296,6 +296,15 @@ defmodule ExBlofin.WebSocket.MessageTest do
       assert order.fill_price == "49000.0"
       assert order.fill_size == "10"
     end
+
+    test "carries the Multi-Position positionId" do
+      raw =
+        Fixtures.sample_ws_order_event()
+        |> update_in(["data"], fn [d | rest] -> [Map.put(d, "positionId", "7982") | rest] end)
+        |> Jason.encode!()
+
+      assert {:ok, :orders, [%Message.OrderEvent{position_id: "7982"}]} = Message.parse(raw)
+    end
   end
 
   describe "parse/1 - orders-algo" do
@@ -315,6 +324,7 @@ defmodule ExBlofin.WebSocket.MessageTest do
               "state" => "live",
               "triggerPrice" => "48000.0",
               "triggerType" => "last",
+              "positionId" => "1000010175484",
               "createTime" => "1697021343571",
               "updateTime" => "1697021343571"
             }
@@ -327,6 +337,7 @@ defmodule ExBlofin.WebSocket.MessageTest do
       assert algo.inst_id == "BTC-USDT"
       assert algo.state == "live"
       assert algo.trigger_price == "48000.0"
+      assert algo.position_id == "1000010175484"
     end
   end
 

@@ -150,6 +150,7 @@ defmodule ExBlofin.WebSocket.Message do
       :fee,
       :pnl,
       :leverage,
+      :position_id,
       :create_time,
       :update_time
     ]
@@ -169,6 +170,7 @@ defmodule ExBlofin.WebSocket.Message do
             fee: String.t() | nil,
             pnl: String.t() | nil,
             leverage: String.t() | nil,
+            position_id: String.t() | nil,
             create_time: String.t() | nil,
             update_time: String.t() | nil
           }
@@ -187,6 +189,7 @@ defmodule ExBlofin.WebSocket.Message do
       :state,
       :trigger_price,
       :trigger_type,
+      :position_id,
       :create_time,
       :update_time
     ]
@@ -202,6 +205,7 @@ defmodule ExBlofin.WebSocket.Message do
             state: String.t(),
             trigger_price: String.t() | nil,
             trigger_type: String.t() | nil,
+            position_id: String.t() | nil,
             create_time: String.t() | nil,
             update_time: String.t() | nil
           }
@@ -651,6 +655,7 @@ defmodule ExBlofin.WebSocket.Message do
       fee: d["fee"],
       pnl: d["pnl"],
       leverage: d["leverage"],
+      position_id: d["positionId"],
       create_time: d["createTime"],
       update_time: d["updateTime"]
     }
@@ -668,6 +673,7 @@ defmodule ExBlofin.WebSocket.Message do
       state: d["state"],
       trigger_price: d["triggerPrice"],
       trigger_type: d["triggerType"],
+      position_id: d["positionId"],
       create_time: d["createTime"],
       update_time: d["updateTime"]
     }
