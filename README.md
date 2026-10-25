@@ -11,7 +11,7 @@ Add `ex_blofin` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:ex_blofin, git: "https://github.com/drdray1/ex_blofin.git", tag: "0.1.0"}
+    {:ex_blofin, git: "https://github.com/drdray1/ex_blofin.git", tag: "0.2.1"}
   ]
 end
 ```

@@ -76,6 +76,12 @@ four panes, ANSI emitted even when output is not a TTY, and a world-writable
 state file in `scripts/dashboard.sh` that allows local command injection
 through `control.exs`.
 
+## [0.2.1]
+
+### Changed
+
+- Updated dependencies to their latest versions allowed by `mix.exs` (`mix.lock` only).
+
 ## [0.2.0]
 
 Trues the library up against the current BloFin API documentation.
